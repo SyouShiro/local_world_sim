@@ -167,6 +167,16 @@ select:focus {
   flex: 1;
 }
 
+.controls-row {
+  flex-wrap: wrap;
+}
+
+.controls-row > button {
+  flex: 1 1 88px;
+  min-width: 88px;
+  white-space: nowrap;
+}
+
 button {
   border-radius: 999px;
   border: 1px solid transparent;

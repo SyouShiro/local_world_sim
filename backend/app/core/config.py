@@ -1,9 +1,9 @@
 ﻿from __future__ import annotations
 
 from functools import lru_cache
-from typing import List
+from typing import Any, List
 
-from pydantic import Field, field_validator
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -13,8 +13,9 @@ class Settings(BaseSettings):
     app_env: str = Field(default="dev", alias="APP_ENV")
     app_host: str = Field(default="0.0.0.0", alias="APP_HOST")
     app_port: int = Field(default=8000, alias="APP_PORT")
-    cors_origins: List[str] = Field(
-        default_factory=lambda: ["http://127.0.0.1:5500", "http://localhost:5500"],
+    # NOTE: Keep as string to avoid pydantic-settings JSON-decoding complex types from .env.
+    cors_origins: str = Field(
+        default="http://127.0.0.1:5500,http://localhost:5500",
         alias="CORS_ORIGINS",
     )
     db_url: str = Field(default="sqlite+aiosqlite:///./worldline.db", alias="DB_URL")
@@ -40,16 +41,26 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(env_file=(".env", "backend/.env"), extra="ignore")
 
-    @field_validator("cors_origins", mode="before")
-    @classmethod
-    def split_origins(cls, value: str | List[str]) -> List[str]:
-        """Split comma-delimited CORS origins when provided as a string."""
+    def parsed_cors_origins(self) -> List[str]:
+        """Return CORS origins parsed from env var.
 
-        if isinstance(value, list):
-            return value
-        if not value:
+        Supports comma-delimited strings (recommended) and JSON list strings.
+        """
+
+        raw = (self.cors_origins or "").strip()
+        if not raw:
             return []
-        return [item.strip() for item in value.split(",") if item.strip()]
+        if raw.startswith("["):
+            try:
+                import json
+
+                value: Any = json.loads(raw)
+                if isinstance(value, list):
+                    items = [str(item).strip() for item in value]
+                    return [item for item in items if item]
+            except Exception:  # noqa: BLE001
+                pass
+        return [item.strip() for item in raw.split(",") if item.strip()]
 
 
 @lru_cache(maxsize=1)
