@@ -38,7 +38,7 @@ class Settings(BaseSettings):
     embed_dim: int = Field(default=64, alias="EMBED_DIM")
     embed_openai_api_key: str = Field(default="", alias="EMBED_OPENAI_API_KEY")
 
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(env_file=(".env", "backend/.env"), extra="ignore")
 
     @field_validator("cors_origins", mode="before")
     @classmethod
