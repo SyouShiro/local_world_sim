@@ -9,6 +9,7 @@ from app.core.config import get_settings
 from app.core.security import sanitize_text
 from app.db.session import get_session
 from app.repos.branch_repo import BranchRepo
+from app.repos.session_pref_repo import SessionPreferenceRepo
 from app.repos.session_repo import SessionRepo
 from app.schemas.session import (
     SessionCreateRequest,
@@ -25,6 +26,7 @@ router = APIRouter(prefix="/api/session", tags=["session"])
 MAX_TITLE_LEN = 200
 MAX_PRESET_LEN = 8000
 MAX_TICK_LABEL_LEN = 50
+DEFAULT_OUTPUT_LANGUAGE = "en"
 
 
 @router.post("/create", response_model=SessionCreateResponse)
@@ -45,12 +47,14 @@ async def create_session(
         if payload.post_gen_delay_sec is not None
         else settings.default_post_gen_delay_sec
     )
+    output_language = _normalize_language(payload.output_language)
 
     session_id = uuid.uuid4().hex
     branch_id = uuid.uuid4().hex
 
     session_repo = SessionRepo(db)
     branch_repo = BranchRepo(db)
+    preference_repo = SessionPreferenceRepo(db)
 
     async with db.begin():
         await session_repo.create_session(
@@ -66,6 +70,7 @@ async def create_session(
             session_id=session_id,
             name="main",
         )
+        await preference_repo.upsert_output_language(session_id, output_language)
 
     return SessionCreateResponse(
         session_id=session_id,
@@ -134,7 +139,13 @@ async def update_settings(
         if payload.tick_label is not None
         else None
     )
+    output_language = (
+        _normalize_language(payload.output_language)
+        if payload.output_language is not None
+        else None
+    )
     session_repo = SessionRepo(db)
+    preference_repo = SessionPreferenceRepo(db)
     async with db.begin():
         session = await session_repo.update_settings(
             session_id=session_id,
@@ -145,6 +156,8 @@ async def update_settings(
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="Session not found"
             )
+        if output_language is not None:
+            await preference_repo.upsert_output_language(session_id, output_language)
 
     return SessionStateResponse(running=session.running)
 
@@ -166,3 +179,12 @@ async def _ensure_session_exists(session_id: str, db: AsyncSession) -> None:
     session = await session_repo.get_session(session_id)
     if not session:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
+
+
+def _normalize_language(value: str | None) -> str:
+    if not value:
+        return DEFAULT_OUTPUT_LANGUAGE
+    normalized = value.strip().lower().replace("_", "-")
+    if not normalized:
+        return DEFAULT_OUTPUT_LANGUAGE
+    return normalized
