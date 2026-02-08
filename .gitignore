@@ -1,1 +1,7 @@
 *.pyc
+.env
+backend/.env
+worldline.db
+*.db
+*.sqlite
+backend/.local/

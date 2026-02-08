@@ -14,6 +14,7 @@ class SessionCreateRequest(APIModel):
     world_preset: str
     tick_label: Optional[str] = Field(default=None)
     post_gen_delay_sec: Optional[int] = Field(default=None, ge=1, le=3600)
+    output_language: Optional[str] = Field(default=None, min_length=2, max_length=20)
 
 
 class SessionCreateResponse(APIModel):
@@ -29,6 +30,7 @@ class SessionSettingsPatch(APIModel):
 
     tick_label: Optional[str] = Field(default=None)
     post_gen_delay_sec: Optional[int] = Field(default=None, ge=1, le=3600)
+    output_language: Optional[str] = Field(default=None, min_length=2, max_length=20)
 
 
 class SessionStateResponse(APIModel):

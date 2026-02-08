@@ -51,7 +51,7 @@ body::after {
 }
 
 .app {
-  max-width: 1200px;
+  max-width: 1400px;
   margin: 0 auto;
   display: flex;
   flex-direction: column;
@@ -112,8 +112,9 @@ body::after {
 
 .layout {
   display: grid;
-  grid-template-columns: 280px 1fr 240px;
+  grid-template-columns: minmax(280px, 340px) minmax(0, 1fr) minmax(220px, 300px);
   gap: 20px;
+  align-items: start;
 }
 
 .panel {
@@ -125,6 +126,7 @@ body::after {
   display: flex;
   flex-direction: column;
   gap: 14px;
+  min-width: 0;
 }
 
 .panel h2 {
@@ -138,6 +140,7 @@ label {
   gap: 6px;
   font-size: 0.85rem;
   color: var(--muted);
+  min-width: 0;
 }
 
 input,
@@ -150,6 +153,8 @@ select {
   color: var(--ink);
   font-family: "Palatino Linotype", "Book Antiqua", Palatino, serif;
   resize: vertical;
+  width: 100%;
+  max-width: 100%;
 }
 
 input:focus,
@@ -161,10 +166,13 @@ select:focus {
 .row {
   display: flex;
   gap: 10px;
+  flex-wrap: wrap;
+  min-width: 0;
 }
 
 .row > label {
-  flex: 1;
+  flex: 1 1 130px;
+  min-width: 0;
 }
 
 .controls-row {
@@ -177,6 +185,18 @@ select:focus {
   white-space: nowrap;
 }
 
+.inline-option {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8rem;
+}
+
+.inline-option input[type="checkbox"] {
+  width: auto;
+  margin: 0;
+}
+
 button {
   border-radius: 999px;
   border: 1px solid transparent;
@@ -186,6 +206,7 @@ button {
   text-transform: uppercase;
   letter-spacing: 0.08em;
   font-size: 0.75rem;
+  max-width: 100%;
 }
 
 button.primary {
@@ -227,9 +248,12 @@ button:disabled {
   border: 1px solid var(--border);
   padding: 20px;
   box-shadow: var(--shadow);
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-rows: auto auto minmax(240px, 1fr) auto;
   gap: 16px;
+  min-width: 0;
+  min-height: 680px;
+  height: clamp(620px, 74vh, 980px);
 }
 
 .timeline-header {
@@ -237,34 +261,85 @@ button:disabled {
   justify-content: space-between;
   align-items: center;
   gap: 12px;
+  min-width: 0;
 }
 
 .timeline-list {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  max-height: 620px;
+  min-height: 0;
   overflow-y: auto;
   padding-right: 6px;
 }
 
-.timeline-item {
-  padding: 12px 14px;
+.timeline-card {
+  padding: 14px 14px 12px;
   border-radius: 12px;
   border: 1px solid var(--border);
   background: rgba(8, 14, 26, 0.8);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
-.timeline-item h3 {
-  margin: 0 0 6px;
+.timeline-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.timeline-card-title {
+  margin: 0;
   font-size: 0.95rem;
+  color: var(--ink);
 }
 
-.timeline-item p {
+.timeline-card-badge {
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: rgba(108, 195, 178, 0.18);
+  color: var(--ink);
+  padding: 4px 10px;
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.timeline-card-section h4 {
+  margin: 0 0 4px;
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.timeline-card-section p {
   margin: 0;
   color: var(--muted);
   font-size: 0.85rem;
   white-space: pre-wrap;
+}
+
+.timeline-card-section ul {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.timeline-card-section li + li {
+  margin-top: 4px;
+}
+
+.timeline-card pre {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .branch-tabs {
@@ -298,10 +373,12 @@ button:disabled {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  min-width: 0;
 }
 
 .log-panel {
-  max-height: 680px;
+  max-height: min(980px, 74vh);
+  min-width: 0;
 }
 
 .log-list {
@@ -321,7 +398,7 @@ button:disabled {
 
 @media (max-width: 1024px) {
   .layout {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .hero {
@@ -332,6 +409,11 @@ button:disabled {
   .hero-status {
     width: 100%;
   }
+
+  .timeline {
+    height: auto;
+    min-height: 620px;
+  }
 }
 
 @media (max-width: 600px) {
@@ -339,8 +421,9 @@ button:disabled {
     padding: 18px;
   }
 
-  .row {
-    flex-direction: column;
+  .row > label,
+  .controls-row > button {
+    flex-basis: 100%;
   }
 
   .hero h1 {

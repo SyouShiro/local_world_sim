@@ -7,12 +7,28 @@ import {
   listBranches,
   pauseSession,
   resumeSession,
+  updateSettings,
   selectModel,
   setProvider,
   startSession,
   submitIntervention,
   switchBranch,
 } from "./api.js";
+import {
+  applyTranslations,
+  getCurrentLocale,
+  getSupportedLocales,
+  initI18n,
+  setLocale,
+  t,
+} from "./i18n.js";
+import {
+  clearProviderApiKey,
+  getRememberApiKey,
+  loadProviderApiKey,
+  saveProviderApiKey,
+  setRememberApiKey,
+} from "./local_secrets.js";
 import { connectWebSocket, closeWebSocket } from "./ws.js";
 import { appendMessage, setBranches, setStore, setTimeline, store } from "./store.js";
 import {
@@ -29,9 +45,11 @@ const elements = {
   worldPreset: document.getElementById("worldPreset"),
   tickLabel: document.getElementById("tickLabel"),
   postDelay: document.getElementById("postDelay"),
+  languageSelect: document.getElementById("languageSelect"),
   createBtn: document.getElementById("createSession"),
   providerSelect: document.getElementById("providerSelect"),
   apiKey: document.getElementById("apiKey"),
+  rememberApiKey: document.getElementById("rememberApiKey"),
   baseUrl: document.getElementById("baseUrl"),
   loadModelsBtn: document.getElementById("loadModels"),
   modelSelect: document.getElementById("modelSelect"),
@@ -58,6 +76,11 @@ function syncRunnerState(state) {
   setRunnerState(state);
 }
 
+function syncConnectionState(state) {
+  setStore({ connectionState: state });
+  setConnectionState(state);
+}
+
 function setControlsEnabled(enabled) {
   const hasModel = Boolean(store.provider && store.provider.model);
   const hasBranch = Boolean(store.activeBranchId);
@@ -78,7 +101,7 @@ function renderModelOptions(models) {
   elements.modelSelect.innerHTML = "";
   const placeholder = document.createElement("option");
   placeholder.value = "";
-  placeholder.textContent = "Select model...";
+  placeholder.textContent = t("provider.model_placeholder");
   elements.modelSelect.appendChild(placeholder);
   models.forEach((model) => {
     const option = document.createElement("option");
@@ -104,8 +127,62 @@ function renderBranchTabs() {
 
 function applyProviderDefaults(provider) {
   const defaultUrl = providerDefaults[provider] || "";
-  elements.baseUrl.placeholder = defaultUrl || "Base URL";
+  elements.baseUrl.placeholder = defaultUrl || t("provider.base_url_placeholder");
   elements.baseUrl.value = defaultUrl;
+}
+
+function fillLanguageOptions() {
+  elements.languageSelect.innerHTML = "";
+  getSupportedLocales().forEach((locale) => {
+    const option = document.createElement("option");
+    option.value = locale.code;
+    option.textContent = locale.label;
+    elements.languageSelect.appendChild(option);
+  });
+  elements.languageSelect.value = getCurrentLocale();
+}
+
+function normalizeError(error) {
+  const raw = String(error?.message || error || "").trim();
+  if (!raw) return "unknown error";
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed.detail === "string" && parsed.detail.trim()) {
+      return parsed.detail.trim();
+    }
+  } catch (_) {
+    return raw;
+  }
+  return raw;
+}
+
+function logInfo(key, vars = {}) {
+  addLog(t(key, vars));
+}
+
+function logError(key, error) {
+  addLog(t(key, { error: normalizeError(error) }));
+}
+
+function loadLocalApiKeyForProvider(provider, silent = false) {
+  if (!elements.rememberApiKey.checked) return;
+  const localKey = loadProviderApiKey(provider);
+  if (!localKey) return;
+  elements.apiKey.value = localKey;
+  if (!silent) {
+    logInfo("log.local_key_loaded", { provider });
+  }
+}
+
+function persistApiKeyIfNeeded(provider, apiKey) {
+  if (elements.rememberApiKey.checked) {
+    saveProviderApiKey(provider, apiKey);
+    if (String(apiKey || "").trim()) {
+      logInfo("log.local_key_saved", { provider });
+    }
+    return;
+  }
+  clearProviderApiKey(provider);
 }
 
 async function loadBranches() {
@@ -123,7 +200,7 @@ async function loadTimeline() {
     setTimeline(store.activeBranchId, data.messages);
     renderTimeline(data.messages);
   } catch (err) {
-    addLog(`Timeline load failed: ${err.message || err}`);
+    logError("error.timeline_load_failed", err);
   }
 }
 
@@ -134,6 +211,7 @@ async function handleCreateSession() {
       world_preset: elements.worldPreset.value,
       tick_label: elements.tickLabel.value || null,
       post_gen_delay_sec: elements.postDelay.value ? Number(elements.postDelay.value) : null,
+      output_language: getCurrentLocale(),
     };
     const result = await createSession(payload);
 
@@ -155,30 +233,31 @@ async function handleCreateSession() {
 
     setSessionId(result.session_id);
     syncRunnerState("idle");
+    syncConnectionState("disconnected");
     renderModelOptions([]);
     renderBranchTabs();
     setControlsEnabled(true);
-    addLog("Session created.");
+    logInfo("log.session_created");
 
     await loadBranches();
     await loadTimeline();
 
     connectWebSocket(result.session_id, {
       onOpen: async () => {
-        setConnectionState("connected");
-        addLog("WebSocket connected.");
+        syncConnectionState("connected");
+        logInfo("log.ws_connected");
         await loadBranches();
         await loadTimeline();
       },
       onClose: () => {
-        setConnectionState("disconnected");
-        addLog("WebSocket disconnected. Reconnecting...");
+        syncConnectionState("disconnected");
+        logInfo("log.ws_disconnected_reconnecting");
       },
       onEvent: handleWsEvent,
-      onError: (err) => addLog(`WebSocket error: ${err.message || err}`),
+      onError: (err) => logError("error.ws_error", err),
     });
   } catch (err) {
-    addLog(`Create failed: ${err.message || err}`);
+    logError("error.create_failed", err);
   }
 }
 
@@ -186,6 +265,7 @@ function handleProviderChange() {
   const provider = elements.providerSelect.value;
   applyProviderDefaults(provider);
   elements.apiKey.value = "";
+  loadLocalApiKeyForProvider(provider);
   setStore({
     provider: {
       name: provider,
@@ -196,15 +276,17 @@ function handleProviderChange() {
   });
   renderModelOptions([]);
   setControlsEnabled(Boolean(store.session));
-  addLog(`Provider switched to ${provider}. Load models again.`);
+  logInfo("log.provider_switched", { provider });
 }
 
 async function handleLoadModels() {
   if (!store.session) return;
   try {
+    const provider = elements.providerSelect.value;
+    const apiKey = elements.apiKey.value || null;
     const payload = {
-      provider: elements.providerSelect.value,
-      api_key: elements.apiKey.value || null,
+      provider,
+      api_key: apiKey,
       base_url: elements.baseUrl.value || null,
       model_name: null,
     };
@@ -220,10 +302,11 @@ async function handleLoadModels() {
       },
     });
     renderModelOptions(models);
-    addLog("Models loaded.");
+    persistApiKeyIfNeeded(provider, apiKey || "");
+    logInfo("log.models_loaded");
     setControlsEnabled(true);
   } catch (err) {
-    addLog(`Load models failed: ${err.message || err}`);
+    logError("error.load_models_failed", err);
   }
 }
 
@@ -239,10 +322,10 @@ async function handleModelChange() {
         model: modelName,
       },
     });
-    addLog(`Model selected: ${modelName}`);
+    logInfo("log.model_selected", { model: modelName });
     setControlsEnabled(true);
   } catch (err) {
-    addLog(`Select model failed: ${err.message || err}`);
+    logError("error.select_model_failed", err);
   }
 }
 
@@ -251,9 +334,9 @@ async function handleStart() {
   try {
     const state = await startSession(store.session.session_id);
     syncRunnerState(state.running ? "running" : "idle");
-    addLog("Runner started.");
+    logInfo("log.runner_started");
   } catch (err) {
-    addLog(`Start failed: ${err.message || err}`);
+    logError("error.start_failed", err);
   }
 }
 
@@ -262,9 +345,9 @@ async function handlePause() {
   try {
     const state = await pauseSession(store.session.session_id);
     syncRunnerState(state.running ? "running" : "paused");
-    addLog("Runner paused.");
+    logInfo("log.runner_paused");
   } catch (err) {
-    addLog(`Pause failed: ${err.message || err}`);
+    logError("error.pause_failed", err);
   }
 }
 
@@ -273,9 +356,9 @@ async function handleResume() {
   try {
     const state = await resumeSession(store.session.session_id);
     syncRunnerState(state.running ? "running" : "idle");
-    addLog("Runner resumed.");
+    logInfo("log.runner_resumed");
   } catch (err) {
-    addLog(`Resume failed: ${err.message || err}`);
+    logError("error.resume_failed", err);
   }
 }
 
@@ -286,10 +369,10 @@ async function handleForkBranch() {
       source_branch_id: store.activeBranchId,
       from_message_id: null,
     });
-    addLog(`Forked new branch: ${response.branch.name}`);
+    logInfo("log.forked_branch", { branch: response.branch.name });
     await loadBranches();
   } catch (err) {
-    addLog(`Fork failed: ${err.message || err}`);
+    logError("error.fork_failed", err);
   }
 }
 
@@ -302,23 +385,23 @@ async function handleSwitchBranch(branchId) {
     renderBranchTabs();
     setControlsEnabled(Boolean(store.session));
     await loadTimeline();
-    addLog(`Switched to branch: ${response.active_branch_id}`);
+    logInfo("log.switched_branch", { branch: response.active_branch_id });
   } catch (err) {
-    addLog(`Switch branch failed: ${err.message || err}`);
+    logError("error.switch_failed", err);
   }
 }
 
 async function handleDeleteLast() {
   if (!store.session || !store.activeBranchId) return;
   if (store.runnerState === "running") {
-    addLog("Delete while running may fail; pause first if needed.");
+    logInfo("log.delete_running_warning");
   }
   try {
     await deleteLastMessage(store.session.session_id, store.activeBranchId);
-    addLog("Deleted latest message.");
+    logInfo("log.deleted_latest");
     await loadTimeline();
   } catch (err) {
-    addLog(`Delete last failed: ${err.message || err}`);
+    logError("error.delete_failed", err);
   }
 }
 
@@ -326,7 +409,7 @@ async function handleSendIntervention() {
   if (!store.session || !store.activeBranchId) return;
   const content = elements.interventionInput.value.trim();
   if (!content) {
-    addLog("Intervention cannot be empty.");
+    logInfo("log.intervention_empty");
     return;
   }
   try {
@@ -335,9 +418,9 @@ async function handleSendIntervention() {
       content,
     });
     elements.interventionInput.value = "";
-    addLog("Intervention queued.");
+    logInfo("log.intervention_queued");
   } catch (err) {
-    addLog(`Intervention failed: ${err.message || err}`);
+    logError("error.intervention_failed", err);
   }
 }
 
@@ -360,7 +443,7 @@ function handleWsEvent(event) {
     renderBranchTabs();
     setControlsEnabled(Boolean(store.session));
     loadTimeline();
-    addLog(`Branch switched via server: ${event.active_branch_id}`);
+    logInfo("log.switched_branch_server", { branch: event.active_branch_id });
     return;
   }
 
@@ -377,18 +460,55 @@ function handleWsEvent(event) {
       },
     });
     renderModelOptions(event.models || []);
-    addLog("Models loaded via WebSocket.");
+    logInfo("log.models_loaded_ws");
     setControlsEnabled(Boolean(store.session));
     return;
   }
 
   if (event.event === "error") {
-    addLog(`Runner error: ${event.message}`);
+    logInfo("error.runner_error", { error: event.message || "unknown" });
   }
 }
 
+async function handleLanguageChange() {
+  const nextLocale = elements.languageSelect.value;
+  await setLocale(nextLocale);
+  setSessionId(store.session?.session_id || null);
+  syncRunnerState(store.runnerState);
+  syncConnectionState(store.connectionState);
+  renderModelOptions(store.provider.models || []);
+  renderBranchTabs();
+  const activeTimeline = store.timelineByBranch[store.activeBranchId] || [];
+  renderTimeline(activeTimeline);
+  if (store.session?.session_id) {
+    try {
+      await updateSettings(store.session.session_id, { output_language: getCurrentLocale() });
+      logInfo("log.language_synced", { language: getCurrentLocale() });
+    } catch (err) {
+      logError("log.language_sync_failed", err);
+    }
+  }
+}
+
+function handleRememberApiKeyToggle() {
+  const provider = elements.providerSelect.value;
+  const enabled = elements.rememberApiKey.checked;
+  setRememberApiKey(enabled);
+  if (enabled) {
+    persistApiKeyIfNeeded(provider, elements.apiKey.value || "");
+    loadLocalApiKeyForProvider(provider, true);
+    return;
+  }
+  clearProviderApiKey(provider);
+  logInfo("log.local_key_cleared", { provider });
+}
+
 elements.createBtn.addEventListener("click", handleCreateSession);
+elements.languageSelect.addEventListener("change", () => {
+  handleLanguageChange().catch((err) => logError("log.language_sync_failed", err));
+});
 elements.providerSelect.addEventListener("change", handleProviderChange);
+elements.rememberApiKey.addEventListener("change", handleRememberApiKeyToggle);
 elements.loadModelsBtn.addEventListener("click", handleLoadModels);
 elements.modelSelect.addEventListener("change", handleModelChange);
 elements.startBtn.addEventListener("click", handleStart);
@@ -399,12 +519,27 @@ elements.forkBtn.addEventListener("click", handleForkBranch);
 elements.deleteLastBtn.addEventListener("click", handleDeleteLast);
 elements.sendInterventionBtn.addEventListener("click", handleSendIntervention);
 
-setControlsEnabled(false);
-setConnectionState("disconnected");
-syncRunnerState("idle");
-renderModelOptions([]);
-renderBranchTabs();
-applyProviderDefaults(elements.providerSelect.value);
+async function bootstrap() {
+  await initI18n();
+  applyTranslations();
+  fillLanguageOptions();
+  setStore({ locale: getCurrentLocale() });
+
+  elements.rememberApiKey.checked = getRememberApiKey();
+
+  setControlsEnabled(false);
+  setSessionId(null);
+  syncConnectionState("disconnected");
+  syncRunnerState("idle");
+  renderModelOptions([]);
+  renderBranchTabs();
+  applyProviderDefaults(elements.providerSelect.value);
+  loadLocalApiKeyForProvider(elements.providerSelect.value, true);
+}
+
+bootstrap().catch((err) => {
+  addLog(`bootstrap failed: ${normalizeError(err)}`);
+});
 
 window.addEventListener("beforeunload", () => {
   closeWebSocket();

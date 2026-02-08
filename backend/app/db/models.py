@@ -38,6 +38,21 @@ class WorldSession(Base):
     )
 
 
+class SessionPreference(Base):
+    """User preferences associated with one simulation session."""
+
+    __tablename__ = "session_preferences"
+
+    session_id: Mapped[str] = mapped_column(
+        String, ForeignKey("world_sessions.id"), primary_key=True
+    )
+    output_language: Mapped[str] = mapped_column(String, nullable=False, default="en")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
+    )
+
+
 class Branch(Base):
     """Branch for a simulation timeline."""
 

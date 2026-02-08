@@ -10,23 +10,23 @@
     <div class="app">
       <header class="hero">
         <div>
-          <p class="eyebrow">Worldline Simulation</p>
-          <h1>Worldline Sim</h1>
-          <p class="subtitle">
+          <p class="eyebrow" data-i18n="hero.eyebrow">Worldline Simulation</p>
+          <h1 data-i18n="hero.title">Worldline Sim</h1>
+          <p class="subtitle" data-i18n="hero.subtitle">
             Create a world, let it evolve, and track each tick as a structured report.
           </p>
         </div>
         <div class="hero-status">
           <div class="status-card">
-            <span>Session</span>
+            <span data-i18n="status.session">Session</span>
             <strong id="sessionId">Not created</strong>
           </div>
           <div class="status-card">
-            <span>Runner</span>
+            <span data-i18n="status.runner">Runner</span>
             <strong id="runnerState">idle</strong>
           </div>
           <div class="status-card">
-            <span>WebSocket</span>
+            <span data-i18n="status.websocket">WebSocket</span>
             <strong id="connectionState">disconnected</strong>
           </div>
         </div>
@@ -34,36 +34,42 @@
 
       <section class="layout">
         <aside class="panel">
-          <h2>Session Setup</h2>
+          <h2 data-i18n="setup.section">Session Setup</h2>
           <label>
-            Title
-            <input id="sessionTitle" type="text" placeholder="e.g. Steam City" />
+            <span data-i18n="setup.language">Interface Language</span>
+            <select id="languageSelect"></select>
           </label>
           <label>
-            World preset
+            <span data-i18n="setup.title">Title</span>
+            <input id="sessionTitle" type="text" data-i18n-placeholder="setup.title_placeholder" />
+          </label>
+          <label>
+            <span data-i18n="setup.world_preset">World preset</span>
             <textarea
               id="worldPreset"
               rows="6"
-              placeholder="Describe the starting world state..."
+              data-i18n-placeholder="setup.world_preset_placeholder"
             ></textarea>
           </label>
           <div class="row">
             <label>
-              Tick label
-              <input id="tickLabel" type="text" placeholder="1 month" />
+              <span data-i18n="setup.tick_label">Tick label</span>
+              <input id="tickLabel" type="text" data-i18n-placeholder="setup.tick_placeholder" />
             </label>
             <label>
-              Delay (sec)
+              <span data-i18n="setup.delay_sec">Delay (sec)</span>
               <input id="postDelay" type="number" min="1" max="3600" value="5" />
             </label>
           </div>
-          <button id="createSession" class="primary">Create Session</button>
+          <button id="createSession" class="primary" data-i18n="setup.create_session">
+            Create Session
+          </button>
 
           <div class="divider"></div>
 
-          <h2>Provider</h2>
+          <h2 data-i18n="provider.section">Provider</h2>
           <label>
-            Provider
+            <span data-i18n="provider.provider">Provider</span>
             <select id="providerSelect">
               <option value="openai">OpenAI</option>
               <option value="ollama">Ollama</option>
@@ -72,58 +78,71 @@
             </select>
           </label>
           <label>
-            API key
-            <input id="apiKey" type="password" placeholder="sk-..." />
+            <span data-i18n="provider.api_key">API key</span>
+            <input id="apiKey" type="password" data-i18n-placeholder="provider.api_key_placeholder" />
           </label>
-          <label>
-            Base URL
-            <input id="baseUrl" type="text" placeholder="https://api.openai.com" />
+          <label class="inline-option">
+            <input id="rememberApiKey" type="checkbox" />
+            <span data-i18n="provider.remember_key">Remember API key on this device</span>
           </label>
-          <button id="loadModels" class="ghost">Load Models</button>
+          <p class="hint" data-i18n="provider.remember_hint">
+            Stored in this browser only, not tracked by git.
+          </p>
           <label>
-            Model
+            <span data-i18n="provider.base_url">Base URL</span>
+            <input id="baseUrl" type="text" data-i18n-placeholder="provider.base_url_placeholder" />
+          </label>
+          <button id="loadModels" class="ghost" data-i18n="provider.load_models">Load Models</button>
+          <label>
+            <span data-i18n="provider.model">Model</span>
             <select id="modelSelect"></select>
           </label>
 
           <div class="divider"></div>
 
-          <h2>Runner Controls</h2>
+          <h2 data-i18n="runner.section">Runner Controls</h2>
           <div class="row controls-row">
-            <button id="startSession" class="accent">Start</button>
-            <button id="pauseSession" class="ghost">Pause</button>
-            <button id="resumeSession" class="ghost">Resume</button>
+            <button id="startSession" class="accent" data-i18n="runner.start">Start</button>
+            <button id="pauseSession" class="ghost" data-i18n="runner.pause">Pause</button>
+            <button id="resumeSession" class="ghost" data-i18n="runner.resume">Resume</button>
           </div>
-          <p class="hint">
+          <p class="hint" data-i18n="runner.hint">
             The runner generates a report, then waits the configured delay before the next tick.
           </p>
         </aside>
 
         <main class="timeline">
           <div class="timeline-header">
-            <h2>Timeline</h2>
+            <h2 data-i18n="timeline.section">Timeline</h2>
             <div class="row">
-              <button id="forkBranch" class="ghost">Fork Branch</button>
-              <button id="deleteLast" class="ghost">Delete Last</button>
-              <button id="refreshTimeline" class="ghost">Refresh</button>
+              <button id="forkBranch" class="ghost" data-i18n="timeline.fork_branch">
+                Fork Branch
+              </button>
+              <button id="deleteLast" class="ghost" data-i18n="timeline.delete_last">
+                Delete Last
+              </button>
+              <button id="refreshTimeline" class="ghost" data-i18n="timeline.refresh">Refresh</button>
             </div>
           </div>
           <div id="branchTabs" class="branch-tabs"></div>
           <div id="timelineList" class="timeline-list"></div>
           <div class="intervention-box">
             <label>
-              Intervention
+              <span data-i18n="timeline.intervention">Intervention</span>
               <textarea
                 id="interventionInput"
                 rows="3"
-                placeholder="e.g. A three-month drought hits the northern provinces."
+                data-i18n-placeholder="timeline.intervention_placeholder"
               ></textarea>
             </label>
-            <button id="sendIntervention" class="primary">Send Intervention</button>
+            <button id="sendIntervention" class="primary" data-i18n="timeline.send_intervention">
+              Send Intervention
+            </button>
           </div>
         </main>
 
         <aside class="panel log-panel">
-          <h2>System Log</h2>
+          <h2 data-i18n="log.section">System Log</h2>
           <div id="logList" class="log-list"></div>
         </aside>
       </section>

@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.db.models import TimelineMessage, UserIntervention
 from app.repos.message_repo import MessageRepo
+from app.repos.session_pref_repo import SessionPreferenceRepo
 from app.repos.session_repo import SessionRepo
 from app.services.memory_service import MemoryService
 from app.services.provider_service import ProviderService
@@ -30,6 +31,7 @@ class SimulationService:
 
         async with self._sessionmaker() as db:
             session_repo = SessionRepo(db)
+            preference_repo = SessionPreferenceRepo(db)
             message_repo = MessageRepo(db)
 
             session = await session_repo.get_session(session_id)
@@ -42,11 +44,13 @@ class SimulationService:
             interventions = await message_repo.list_pending_interventions(
                 session.id, session.active_branch_id, limit=20
             )
+            preference = await preference_repo.get_by_session(session.id)
             snapshot = {
                 "session_id": session.id,
                 "branch_id": session.active_branch_id,
                 "world_preset": session.world_preset,
                 "tick_label": session.tick_label,
+                "output_language": preference.output_language if preference else "en",
                 "intervention_ids": [item.id for item in interventions],
             }
 
@@ -67,6 +71,7 @@ class SimulationService:
             interventions=interventions,
             tick_label=snapshot["tick_label"],
             memory_snippets=memory_snippets,
+            output_language=snapshot["output_language"],
         )
         adapter, runtime_cfg = await self._provider_service.get_generation_config(session_id)
         result = await adapter.generate(runtime_cfg, prompt_messages, stream=False)

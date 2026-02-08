@@ -27,13 +27,16 @@ class PromptBuilder:
         interventions: Iterable[UserIntervention],
         tick_label: str,
         memory_snippets: Iterable[MemorySnippet] | None = None,
+        output_language: str = "en",
     ) -> List[dict]:
         """Create the message list for an LLM provider."""
 
+        language_hint = self._language_name(output_language)
         system_prompt = (
             "You are generating a world progress report. "
             "Keep it concise, structured, and continuous. "
-            "Output JSON with title, time_advance, summary, events, and risks."
+            "Output JSON with title, time_advance, summary, events, and risks. "
+            f"Keep JSON keys in English. Write all human-readable values in {language_hint}."
         )
         history_lines = []
         for message in list(timeline)[-self._max_history :]:
@@ -112,3 +115,19 @@ class PromptBuilder:
         if not compact:
             return 0
         return max(1, len(compact) // 4)
+
+    @staticmethod
+    def _language_name(code: str) -> str:
+        normalized = code.strip().lower().replace("_", "-")
+        mapping = {
+            "en": "English",
+            "zh": "Chinese",
+            "zh-cn": "Simplified Chinese",
+            "zh-tw": "Traditional Chinese",
+            "ja": "Japanese",
+            "ko": "Korean",
+            "es": "Spanish",
+            "fr": "French",
+            "de": "German",
+        }
+        return mapping.get(normalized, normalized or "English")
