@@ -101,9 +101,25 @@
         <main class="timeline">
           <div class="timeline-header">
             <h2>Timeline</h2>
-            <button id="refreshTimeline" class="ghost">Refresh</button>
+            <div class="row">
+              <button id="forkBranch" class="ghost">Fork Branch</button>
+              <button id="deleteLast" class="ghost">Delete Last</button>
+              <button id="refreshTimeline" class="ghost">Refresh</button>
+            </div>
           </div>
+          <div id="branchTabs" class="branch-tabs"></div>
           <div id="timelineList" class="timeline-list"></div>
+          <div class="intervention-box">
+            <label>
+              Intervention
+              <textarea
+                id="interventionInput"
+                rows="3"
+                placeholder="e.g. A three-month drought hits the northern provinces."
+              ></textarea>
+            </label>
+            <button id="sendIntervention" class="primary">Send Intervention</button>
+          </div>
         </main>
 
         <aside class="panel log-panel">

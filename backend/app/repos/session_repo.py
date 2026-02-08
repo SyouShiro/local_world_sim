@@ -75,3 +75,16 @@ class SessionRepo:
         session.updated_at = utc_now()
         await self._db.flush()
         return session
+
+    async def update_active_branch(
+        self, session_id: str, active_branch_id: str
+    ) -> Optional[WorldSession]:
+        """Switch the active branch for a session."""
+
+        session = await self.get_session(session_id)
+        if not session:
+            return None
+        session.active_branch_id = active_branch_id
+        session.updated_at = utc_now()
+        await self._db.flush()
+        return session

@@ -3,13 +3,22 @@
 from typing import Iterable, List
 
 from app.db.models import TimelineMessage, UserIntervention
+from app.memory.types import MemorySnippet
 
 
 class PromptBuilder:
     """Compose prompts for LLM generation."""
 
-    def __init__(self, max_history: int = 12) -> None:
+    def __init__(
+        self,
+        max_history: int = 12,
+        memory_max_snippets: int = 8,
+        memory_max_chars: int = 4000,
+    ) -> None:
         self._max_history = max_history
+        self._memory_max_snippets = max(1, memory_max_snippets)
+        self._memory_max_chars = max(200, memory_max_chars)
+        self._memory_max_tokens = max(50, memory_max_chars // 4)
 
     def build_messages(
         self,
@@ -17,6 +26,7 @@ class PromptBuilder:
         timeline: Iterable[TimelineMessage],
         interventions: Iterable[UserIntervention],
         tick_label: str,
+        memory_snippets: Iterable[MemorySnippet] | None = None,
     ) -> List[dict]:
         """Create the message list for an LLM provider."""
 
@@ -31,17 +41,74 @@ class PromptBuilder:
         intervention_lines = [f"- {item.content}" for item in interventions]
         history_text = "\n".join(history_lines) if history_lines else "(none)"
         intervention_text = "\n".join(intervention_lines) if intervention_lines else "(none)"
-        user_prompt = (
-            "World preset:\n"
-            f"{world_preset}\n\n"
-            "Recent timeline:\n"
-            f"{history_text}\n\n"
-            "Pending interventions:\n"
-            f"{intervention_text}\n\n"
-            f"Time advance label: {tick_label}\n"
-            "Return JSON only."
-        )
+
+        memory_section = self._build_memory_section(memory_snippets)
+        if memory_section:
+            user_prompt = (
+                "World preset:\n"
+                f"{world_preset}\n\n"
+                "Recent timeline:\n"
+                f"{history_text}\n\n"
+                "Long-term memory context:\n"
+                f"{memory_section}\n\n"
+                "Pending interventions:\n"
+                f"{intervention_text}\n\n"
+                f"Time advance label: {tick_label}\n"
+                "Return JSON only."
+            )
+        else:
+            user_prompt = (
+                "World preset:\n"
+                f"{world_preset}\n\n"
+                "Recent timeline:\n"
+                f"{history_text}\n\n"
+                "Pending interventions:\n"
+                f"{intervention_text}\n\n"
+                f"Time advance label: {tick_label}\n"
+                "Return JSON only."
+            )
+
         return [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
         ]
+
+    def _build_memory_section(self, memory_snippets: Iterable[MemorySnippet] | None) -> str:
+        if not memory_snippets:
+            return ""
+
+        lines: list[str] = []
+        seen: set[str] = set()
+        total_chars = 0
+        total_tokens = 0
+        for snippet in memory_snippets:
+            text = " ".join(snippet.content.split())
+            if not text:
+                continue
+            dedupe_key = text.casefold()
+            if dedupe_key in seen:
+                continue
+
+            estimated_tokens = self._estimate_tokens(text)
+            projected_chars = total_chars + len(text)
+            projected_tokens = total_tokens + estimated_tokens
+            if projected_chars > self._memory_max_chars:
+                break
+            if projected_tokens > self._memory_max_tokens:
+                break
+
+            lines.append(f"- #{snippet.source_message_seq} {text}")
+            seen.add(dedupe_key)
+            total_chars = projected_chars
+            total_tokens = projected_tokens
+            if len(lines) >= self._memory_max_snippets:
+                break
+
+        return "\n".join(lines)
+
+    @staticmethod
+    def _estimate_tokens(text: str) -> int:
+        compact = text.strip()
+        if not compact:
+            return 0
+        return max(1, len(compact) // 4)

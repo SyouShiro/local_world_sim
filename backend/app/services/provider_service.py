@@ -17,6 +17,8 @@ from app.repos.provider_repo import ProviderRepo
 from app.utils.crypto import SecretCipher
 from app.api.websocket import WebSocketManager
 
+SUPPORTED_PROVIDERS = ("openai", "ollama", "deepseek", "gemini")
+
 
 class ProviderService:
     """Manage provider configuration and adapter access."""
@@ -64,6 +66,7 @@ class ProviderService:
     ) -> ProviderConfig:
         """Store provider configuration after validation."""
 
+        provider = self._normalize_provider(provider)
         adapter = self._get_adapter(provider)
         async with self._sessionmaker() as db:
             repo = ProviderRepo(db)
@@ -76,26 +79,27 @@ class ProviderService:
                 base_url=base_url,
                 api_key=self._decrypt_key(encrypted_key),
             )
-            models = await adapter.list_models(runtime_cfg)
+            models = self._normalize_models(await adapter.list_models(runtime_cfg))
             if model_name and model_name not in models:
                 raise ProviderError(
                     "PROVIDER_MODEL_INVALID", "Selected model is not available."
                 )
 
-            async with db.begin():
-                config = await repo.upsert_config(
-                    config_id=existing.id if existing else uuid.uuid4().hex,
-                    session_id=session_id,
-                    provider=provider,
-                    base_url=base_url,
-                    api_key_encrypted=encrypted_key,
-                    model_name=model_name,
-                )
+            config = await repo.upsert_config(
+                config_id=existing.id if existing else uuid.uuid4().hex,
+                session_id=session_id,
+                provider=provider,
+                base_url=base_url,
+                api_key_encrypted=encrypted_key,
+                model_name=model_name,
+            )
+            await db.commit()
             return config
 
     async def list_models(self, session_id: str, provider: str) -> list[str]:
         """Fetch available models from the configured provider."""
 
+        provider = self._normalize_provider(provider)
         adapter = self._get_adapter(provider)
         async with self._sessionmaker() as db:
             repo = ProviderRepo(db)
@@ -109,7 +113,7 @@ class ProviderService:
                 api_key=self._decrypt_key(config.api_key_encrypted),
             )
 
-        models = await adapter.list_models(runtime_cfg)
+        models = self._normalize_models(await adapter.list_models(runtime_cfg))
         await self._ws_manager.broadcast(
             session_id, {"event": "models_loaded", "provider": provider, "models": models}
         )
@@ -117,6 +121,29 @@ class ProviderService:
 
     async def select_model(self, session_id: str, model_name: str) -> ProviderConfig:
         """Update the selected model for the provider configuration."""
+
+        model_name = model_name.strip()
+        if not model_name:
+            raise ProviderError("PROVIDER_MODEL_INVALID", "Model name must not be empty.")
+
+        async with self._sessionmaker() as db:
+            repo = ProviderRepo(db)
+            config = await repo.get_by_session(session_id)
+            if not config:
+                raise ProviderError("PROVIDER_CONFIG_MISSING", "Provider config not found.")
+            adapter = self._get_adapter(config.provider)
+            runtime_cfg = ProviderRuntimeConfig(
+                provider=config.provider,
+                model_name=model_name,
+                base_url=config.base_url or self._default_base_url(config.provider),
+                api_key=self._decrypt_key(config.api_key_encrypted),
+            )
+
+        models = self._normalize_models(await adapter.list_models(runtime_cfg))
+        if model_name not in models:
+            raise ProviderError(
+                "PROVIDER_MODEL_INVALID", "Selected model is not available."
+            )
 
         async with self._sessionmaker() as db:
             repo = ProviderRepo(db)
@@ -161,6 +188,25 @@ class ProviderService:
         if provider == "gemini":
             return self._settings.gemini_base_url
         raise ProviderError("PROVIDER_UNSUPPORTED", f"Unsupported provider: {provider}")
+
+    @staticmethod
+    def _normalize_provider(provider: str) -> str:
+        normalized = provider.strip().lower()
+        if normalized not in SUPPORTED_PROVIDERS:
+            raise ProviderError("PROVIDER_UNSUPPORTED", f"Unsupported provider: {provider}")
+        return normalized
+
+    @staticmethod
+    def _normalize_models(models: list[str]) -> list[str]:
+        deduped: list[str] = []
+        seen: set[str] = set()
+        for model in models:
+            candidate = model.strip()
+            if not candidate or candidate in seen:
+                continue
+            seen.add(candidate)
+            deduped.append(candidate)
+        return deduped
 
     def _resolve_api_key(
         self,

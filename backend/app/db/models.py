@@ -3,7 +3,17 @@
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -91,3 +101,54 @@ class ProviderConfig(Base):
     model_name: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     extra_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
+class MemoryItem(Base):
+    """Persisted memory snippet metadata keyed by session/branch/message."""
+
+    __tablename__ = "memory_items"
+    __table_args__ = (
+        UniqueConstraint(
+            "branch_id",
+            "source_message_id",
+            "content_hash",
+            name="uq_memory_branch_message_hash",
+        ),
+        Index("ix_memory_scope_active", "session_id", "branch_id", "is_active"),
+        Index("ix_memory_source_message", "source_message_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    session_id: Mapped[str] = mapped_column(String, ForeignKey("world_sessions.id"), nullable=False)
+    branch_id: Mapped[str] = mapped_column(String, ForeignKey("branches.id"), nullable=False)
+    source_message_id: Mapped[str] = mapped_column(
+        String, ForeignKey("timeline_messages.id"), nullable=False
+    )
+    source_message_seq: Mapped[int] = mapped_column(Integer, nullable=False)
+    source_role: Mapped[str] = mapped_column(String, nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    content_hash: Mapped[str] = mapped_column(String, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    invalidated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class MemoryEmbedding(Base):
+    """Vector payload associated with a memory item."""
+
+    __tablename__ = "memory_embeddings"
+    __table_args__ = (
+        UniqueConstraint("memory_item_id", name="uq_memory_embedding_item"),
+        Index("ix_memory_embedding_item", "memory_item_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    memory_item_id: Mapped[str] = mapped_column(
+        String, ForeignKey("memory_items.id"), nullable=False
+    )
+    provider: Mapped[str] = mapped_column(String, nullable=False)
+    model_name: Mapped[str] = mapped_column(String, nullable=False)
+    dim: Mapped[int] = mapped_column(Integer, nullable=False)
+    vector_json: Mapped[str] = mapped_column(Text, nullable=False)
+    vector_norm: Mapped[float] = mapped_column(Float, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)

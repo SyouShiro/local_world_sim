@@ -1,21 +1,23 @@
 ﻿import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-import httpx
 import pytest
 
-from app.core.config import get_settings
-from app.db.base import init_db
-from app.main import create_app
-from app.providers.base import LLMResult, ProviderRuntimeConfig
+if TYPE_CHECKING:
+    import httpx
+    from app.providers.base import LLMResult, ProviderRuntimeConfig
 
 
 @pytest.fixture
 def app(tmp_path, monkeypatch):
+    from app.core.config import get_settings
+    from app.main import create_app
+
     db_path = tmp_path / "test_worldline.db"
     monkeypatch.setenv("DB_URL", f"sqlite+aiosqlite:///{db_path}")
     monkeypatch.setenv("APP_SECRET_KEY", "test-secret")
@@ -29,6 +31,10 @@ def app(tmp_path, monkeypatch):
 
 @pytest.fixture
 async def client(app):
+    import httpx
+
+    from app.db.base import init_db
+
     await init_db(app.state.engine)
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
@@ -45,12 +51,14 @@ def anyio_backend():
 class StubAdapter:
     """Adapter stub used to avoid external API calls in tests."""
 
-    async def list_models(self, cfg: ProviderRuntimeConfig) -> list[str]:
+    async def list_models(self, cfg: "ProviderRuntimeConfig") -> list[str]:
         return [cfg.model_name or "stub-model"]
 
     async def generate(
-        self, cfg: ProviderRuntimeConfig, messages: list[dict], stream: bool = False
-    ) -> LLMResult:
+        self, cfg: "ProviderRuntimeConfig", messages: list[dict], stream: bool = False
+    ) -> "LLMResult":
+        from app.providers.base import LLMResult
+
         content = (
             "{"
             "\"title\":\"Stub Report\","

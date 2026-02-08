@@ -49,6 +49,38 @@ export async function getTimeline(sessionId, branchId, limit = 200) {
   return request(`/api/timeline/${sessionId}?${query.toString()}`);
 }
 
+export async function listBranches(sessionId) {
+  return request(`/api/branch/${sessionId}`);
+}
+
+export async function forkBranch(sessionId, payload) {
+  return request(`/api/branch/${sessionId}/fork`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function switchBranch(sessionId, payload) {
+  return request(`/api/branch/${sessionId}/switch`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteLastMessage(sessionId, branchId) {
+  const query = new URLSearchParams({ branch_id: branchId });
+  return request(`/api/message/${sessionId}/last?${query.toString()}`, {
+    method: "DELETE",
+  });
+}
+
+export async function submitIntervention(sessionId, payload) {
+  return request(`/api/intervention/${sessionId}`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
 export async function setProvider(sessionId, payload) {
   return request(`/api/provider/${sessionId}/set`, {
     method: "POST",

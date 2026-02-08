@@ -1,7 +1,9 @@
+from __future__ import annotations
+
 import httpx
 import pytest
 
-from app.providers.base import ProviderRuntimeConfig
+from app.providers.base import ProviderError, ProviderRuntimeConfig
 from app.providers.deepseek_adapter import DeepSeekAdapter
 from app.providers.gemini_adapter import GeminiAdapter
 from app.providers.ollama_adapter import OllamaAdapter
@@ -112,6 +114,8 @@ async def test_deepseek_adapter_list_and_generate():
 @pytest.mark.anyio
 async def test_gemini_adapter_list_and_generate():
     def handler(request: httpx.Request) -> httpx.Response:
+        assert not request.url.query
+        assert request.headers.get("x-goog-api-key") == "sk-gemini"
         if request.url.path == "/v1beta/models":
             return httpx.Response(200, json={"models": [{"name": "models/gemini-test"}]})
         if request.url.path == "/v1beta/models/gemini-test:generateContent":
@@ -144,3 +148,42 @@ async def test_gemini_adapter_list_and_generate():
         assert "hello from gemini" in result.content
         assert result.token_in == 6
         assert result.token_out == 8
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("provider", "base_url", "api_key", "expected_path"),
+    [
+        ("openai", "https://api.openai.com", "sk-openai", "/v1/models"),
+        ("ollama", "http://localhost:11434", None, "/api/tags"),
+        ("deepseek", "https://api.deepseek.com", "sk-deepseek", "/models"),
+        ("gemini", "https://generativelanguage.googleapis.com", "sk-gemini", "/v1beta/models"),
+    ],
+)
+async def test_adapter_list_models_rate_limit_is_retryable(
+    provider: str, base_url: str, api_key: str | None, expected_path: str
+):
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == expected_path
+        return httpx.Response(429, json={"error": {"message": "rate limited"}})
+
+    adapter_map = {
+        "openai": OpenAIAdapter,
+        "ollama": OllamaAdapter,
+        "deepseek": DeepSeekAdapter,
+        "gemini": GeminiAdapter,
+    }
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport, base_url=base_url) as client:
+        adapter = adapter_map[provider](http_client=client)
+        cfg = ProviderRuntimeConfig(
+            provider=provider,
+            model_name="test-model",
+            base_url=base_url,
+            api_key=api_key,
+        )
+        with pytest.raises(ProviderError) as exc_info:
+            await adapter.list_models(cfg)
+
+    assert exc_info.value.code == "PROVIDER_RATE_LIMIT"
+    assert exc_info.value.retryable is True

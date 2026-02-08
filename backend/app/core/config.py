@@ -30,6 +30,13 @@ class Settings(BaseSettings):
     gemini_base_url: str = Field(
         default="https://generativelanguage.googleapis.com", alias="GEMINI_BASE_URL"
     )
+    memory_mode: str = Field(default="off", alias="MEMORY_MODE")
+    memory_max_snippets: int = Field(default=8, alias="MEMORY_MAX_SNIPPETS")
+    memory_max_chars: int = Field(default=4000, alias="MEMORY_MAX_CHARS")
+    embed_provider: str = Field(default="deterministic", alias="EMBED_PROVIDER")
+    embed_model: str = Field(default="deterministic-v1", alias="EMBED_MODEL")
+    embed_dim: int = Field(default=64, alias="EMBED_DIM")
+    embed_openai_api_key: str = Field(default="", alias="EMBED_OPENAI_API_KEY")
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

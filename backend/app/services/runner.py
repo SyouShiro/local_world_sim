@@ -73,6 +73,15 @@ class RunnerManager:
             handle.task.cancel()
         await asyncio.gather(*(handle.task for handle in handles), return_exceptions=True)
 
+    async def is_generating(self, session_id: str) -> bool:
+        """Return True when the runner is currently inside generation section."""
+
+        async with self._handles_lock:
+            handle = self._handles.get(session_id)
+            if not handle or handle.task.done():
+                return False
+            return handle.generation_lock.locked()
+
     async def _set_running(self, session_id: str, running: bool) -> Optional[bool]:
         async with self._sessionmaker() as db:
             async with db.begin():

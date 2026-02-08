@@ -43,3 +43,27 @@ class BranchRepo:
 
         result = await self._db.execute(select(Branch).where(Branch.id == branch_id))
         return result.scalar_one_or_none()
+
+    async def get_branch_in_session(
+        self, session_id: str, branch_id: str
+    ) -> Optional[Branch]:
+        """Fetch a non-archived branch by ID constrained to a session."""
+
+        result = await self._db.execute(
+            select(Branch).where(
+                Branch.id == branch_id,
+                Branch.session_id == session_id,
+                Branch.is_archived.is_(False),
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def list_by_session(self, session_id: str) -> list[Branch]:
+        """List non-archived branches in creation order."""
+
+        result = await self._db.execute(
+            select(Branch)
+            .where(Branch.session_id == session_id, Branch.is_archived.is_(False))
+            .order_by(Branch.created_at.asc())
+        )
+        return list(result.scalars())

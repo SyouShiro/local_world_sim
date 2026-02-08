@@ -1,7 +1,9 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from datetime import datetime
 from typing import List, Optional
+
+from pydantic import Field
 
 from app.schemas.common import APIModel
 
@@ -27,3 +29,24 @@ class TimelineResponse(APIModel):
     """Response containing timeline messages."""
 
     messages: List[TimelineMessageOut]
+
+
+class DeleteLastMessageResponse(APIModel):
+    """Response returned after deleting the latest message."""
+
+    deleted_message_id: str
+    branch_id: str
+
+
+class InterventionCreateRequest(APIModel):
+    """Payload for creating a pending intervention."""
+
+    branch_id: Optional[str] = Field(default=None)
+    content: str
+
+
+class InterventionCreateResponse(APIModel):
+    """Response after enqueuing an intervention."""
+
+    intervention_id: str
+    branch_id: str

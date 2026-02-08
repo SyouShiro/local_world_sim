@@ -226,6 +226,7 @@ button:disabled {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 12px;
 }
 
 .timeline-list {
@@ -254,6 +255,39 @@ button:disabled {
   color: var(--muted);
   font-size: 0.85rem;
   white-space: pre-wrap;
+}
+
+.branch-tabs {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.branch-tab {
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: rgba(8, 14, 26, 0.75);
+  color: var(--muted);
+  padding: 8px 12px;
+  font-size: 0.74rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.branch-tab.active {
+  color: #1c120a;
+  background: var(--accent);
+  border-color: transparent;
+}
+
+.intervention-box {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(8, 14, 26, 0.7);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 .log-panel {

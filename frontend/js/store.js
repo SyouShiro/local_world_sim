@@ -21,6 +21,11 @@ export function setTimeline(branchId, messages) {
   store.timelineByBranch[branchId] = messages;
 }
 
+export function setBranches(branches, activeBranchId) {
+  store.branches = branches;
+  store.activeBranchId = activeBranchId;
+}
+
 export function appendMessage(branchId, message) {
   if (!store.timelineByBranch[branchId]) {
     store.timelineByBranch[branchId] = [];

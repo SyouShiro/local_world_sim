@@ -1,15 +1,20 @@
-﻿import {
+import {
   createSession,
-  getTimeline,
+  deleteLastMessage,
+  forkBranch,
   getModels,
+  getTimeline,
+  listBranches,
   pauseSession,
   resumeSession,
   selectModel,
   setProvider,
   startSession,
+  submitIntervention,
+  switchBranch,
 } from "./api.js";
 import { connectWebSocket, closeWebSocket } from "./ws.js";
-import { appendMessage, setStore, setTimeline, store } from "./store.js";
+import { appendMessage, setBranches, setStore, setTimeline, store } from "./store.js";
 import {
   addLog,
   appendTimelineMessage,
@@ -34,6 +39,11 @@ const elements = {
   pauseBtn: document.getElementById("pauseSession"),
   resumeBtn: document.getElementById("resumeSession"),
   refreshBtn: document.getElementById("refreshTimeline"),
+  forkBtn: document.getElementById("forkBranch"),
+  deleteLastBtn: document.getElementById("deleteLast"),
+  interventionInput: document.getElementById("interventionInput"),
+  sendInterventionBtn: document.getElementById("sendIntervention"),
+  branchTabs: document.getElementById("branchTabs"),
 };
 
 const providerDefaults = {
@@ -43,14 +53,25 @@ const providerDefaults = {
   gemini: "https://generativelanguage.googleapis.com",
 };
 
+function syncRunnerState(state) {
+  setStore({ runnerState: state });
+  setRunnerState(state);
+}
+
 function setControlsEnabled(enabled) {
   const hasModel = Boolean(store.provider && store.provider.model);
+  const hasBranch = Boolean(store.activeBranchId);
+
   elements.startBtn.disabled = !enabled || !hasModel;
   elements.pauseBtn.disabled = !enabled;
   elements.resumeBtn.disabled = !enabled || !hasModel;
-  elements.refreshBtn.disabled = !enabled;
+  elements.refreshBtn.disabled = !enabled || !hasBranch;
+  elements.forkBtn.disabled = !enabled || !hasBranch;
+  elements.deleteLastBtn.disabled = !enabled || !hasBranch;
+  elements.sendInterventionBtn.disabled = !enabled || !hasBranch;
   elements.loadModelsBtn.disabled = !enabled;
   elements.modelSelect.disabled = !enabled;
+  elements.interventionInput.disabled = !enabled || !hasBranch;
 }
 
 function renderModelOptions(models) {
@@ -67,10 +88,43 @@ function renderModelOptions(models) {
   });
 }
 
+function renderBranchTabs() {
+  elements.branchTabs.innerHTML = "";
+  store.branches.forEach((branch) => {
+    const button = document.createElement("button");
+    button.className = `branch-tab${branch.id === store.activeBranchId ? " active" : ""}`;
+    button.textContent = branch.name;
+    button.type = "button";
+    button.addEventListener("click", () => {
+      handleSwitchBranch(branch.id);
+    });
+    elements.branchTabs.appendChild(button);
+  });
+}
+
 function applyProviderDefaults(provider) {
   const defaultUrl = providerDefaults[provider] || "";
   elements.baseUrl.placeholder = defaultUrl || "Base URL";
   elements.baseUrl.value = defaultUrl;
+}
+
+async function loadBranches() {
+  if (!store.session) return;
+  const data = await listBranches(store.session.session_id);
+  setBranches(data.branches || [], data.active_branch_id || null);
+  renderBranchTabs();
+  setControlsEnabled(Boolean(store.session));
+}
+
+async function loadTimeline() {
+  if (!store.session || !store.activeBranchId) return;
+  try {
+    const data = await getTimeline(store.session.session_id, store.activeBranchId);
+    setTimeline(store.activeBranchId, data.messages);
+    renderTimeline(data.messages);
+  } catch (err) {
+    addLog(`Timeline load failed: ${err.message || err}`);
+  }
 }
 
 async function handleCreateSession() {
@@ -79,16 +133,18 @@ async function handleCreateSession() {
       title: elements.title.value || null,
       world_preset: elements.worldPreset.value,
       tick_label: elements.tickLabel.value || null,
-      post_gen_delay_sec: elements.postDelay.value
-        ? Number(elements.postDelay.value)
-        : null,
+      post_gen_delay_sec: elements.postDelay.value ? Number(elements.postDelay.value) : null,
     };
     const result = await createSession(payload);
+
+    closeWebSocket();
+
     setStore({
       session: result,
       branches: [{ id: result.active_branch_id, name: "main" }],
       activeBranchId: result.active_branch_id,
       runnerState: "idle",
+      timelineByBranch: {},
       provider: {
         name: elements.providerSelect.value,
         baseUrl: elements.baseUrl.value || "",
@@ -96,16 +152,23 @@ async function handleCreateSession() {
         models: [],
       },
     });
+
     setSessionId(result.session_id);
-    setRunnerState("idle");
-    addLog("Session created.");
+    syncRunnerState("idle");
     renderModelOptions([]);
+    renderBranchTabs();
     setControlsEnabled(true);
+    addLog("Session created.");
+
+    await loadBranches();
     await loadTimeline();
+
     connectWebSocket(result.session_id, {
-      onOpen: () => {
+      onOpen: async () => {
         setConnectionState("connected");
         addLog("WebSocket connected.");
+        await loadBranches();
+        await loadTimeline();
       },
       onClose: () => {
         setConnectionState("disconnected");
@@ -183,22 +246,11 @@ async function handleModelChange() {
   }
 }
 
-async function loadTimeline() {
-  if (!store.session) return;
-  try {
-    const data = await getTimeline(store.session.session_id, store.activeBranchId);
-    setTimeline(store.activeBranchId, data.messages);
-    renderTimeline(data.messages);
-  } catch (err) {
-    addLog(`Timeline load failed: ${err.message || err}`);
-  }
-}
-
 async function handleStart() {
   if (!store.session) return;
   try {
     const state = await startSession(store.session.session_id);
-    setRunnerState(state.running ? "running" : "idle");
+    syncRunnerState(state.running ? "running" : "idle");
     addLog("Runner started.");
   } catch (err) {
     addLog(`Start failed: ${err.message || err}`);
@@ -209,7 +261,7 @@ async function handlePause() {
   if (!store.session) return;
   try {
     const state = await pauseSession(store.session.session_id);
-    setRunnerState(state.running ? "running" : "paused");
+    syncRunnerState(state.running ? "running" : "paused");
     addLog("Runner paused.");
   } catch (err) {
     addLog(`Pause failed: ${err.message || err}`);
@@ -220,18 +272,81 @@ async function handleResume() {
   if (!store.session) return;
   try {
     const state = await resumeSession(store.session.session_id);
-    setRunnerState(state.running ? "running" : "idle");
+    syncRunnerState(state.running ? "running" : "idle");
     addLog("Runner resumed.");
   } catch (err) {
     addLog(`Resume failed: ${err.message || err}`);
   }
 }
 
-function handleWsEvent(event) {
-  if (event.event === "session_state") {
-    setRunnerState(event.running ? "running" : "paused");
+async function handleForkBranch() {
+  if (!store.session || !store.activeBranchId) return;
+  try {
+    const response = await forkBranch(store.session.session_id, {
+      source_branch_id: store.activeBranchId,
+      from_message_id: null,
+    });
+    addLog(`Forked new branch: ${response.branch.name}`);
+    await loadBranches();
+  } catch (err) {
+    addLog(`Fork failed: ${err.message || err}`);
+  }
+}
+
+async function handleSwitchBranch(branchId) {
+  if (!store.session) return;
+  if (branchId === store.activeBranchId) return;
+  try {
+    const response = await switchBranch(store.session.session_id, { branch_id: branchId });
+    setBranches(store.branches, response.active_branch_id);
+    renderBranchTabs();
+    setControlsEnabled(Boolean(store.session));
+    await loadTimeline();
+    addLog(`Switched to branch: ${response.active_branch_id}`);
+  } catch (err) {
+    addLog(`Switch branch failed: ${err.message || err}`);
+  }
+}
+
+async function handleDeleteLast() {
+  if (!store.session || !store.activeBranchId) return;
+  if (store.runnerState === "running") {
+    addLog("Delete while running may fail; pause first if needed.");
+  }
+  try {
+    await deleteLastMessage(store.session.session_id, store.activeBranchId);
+    addLog("Deleted latest message.");
+    await loadTimeline();
+  } catch (err) {
+    addLog(`Delete last failed: ${err.message || err}`);
+  }
+}
+
+async function handleSendIntervention() {
+  if (!store.session || !store.activeBranchId) return;
+  const content = elements.interventionInput.value.trim();
+  if (!content) {
+    addLog("Intervention cannot be empty.");
     return;
   }
+  try {
+    await submitIntervention(store.session.session_id, {
+      branch_id: store.activeBranchId,
+      content,
+    });
+    elements.interventionInput.value = "";
+    addLog("Intervention queued.");
+  } catch (err) {
+    addLog(`Intervention failed: ${err.message || err}`);
+  }
+}
+
+function handleWsEvent(event) {
+  if (event.event === "session_state") {
+    syncRunnerState(event.running ? "running" : "paused");
+    return;
+  }
+
   if (event.event === "message_created") {
     appendMessage(event.branch_id, event.message);
     if (event.branch_id === store.activeBranchId) {
@@ -239,6 +354,16 @@ function handleWsEvent(event) {
     }
     return;
   }
+
+  if (event.event === "branch_switched") {
+    setBranches(store.branches, event.active_branch_id);
+    renderBranchTabs();
+    setControlsEnabled(Boolean(store.session));
+    loadTimeline();
+    addLog(`Branch switched via server: ${event.active_branch_id}`);
+    return;
+  }
+
   if (event.event === "models_loaded") {
     if (event.provider !== elements.providerSelect.value) {
       return;
@@ -247,13 +372,16 @@ function handleWsEvent(event) {
       provider: {
         ...store.provider,
         name: event.provider,
+        model: null,
         models: event.models,
       },
     });
     renderModelOptions(event.models || []);
     addLog("Models loaded via WebSocket.");
+    setControlsEnabled(Boolean(store.session));
     return;
   }
+
   if (event.event === "error") {
     addLog(`Runner error: ${event.message}`);
   }
@@ -267,11 +395,15 @@ elements.startBtn.addEventListener("click", handleStart);
 elements.pauseBtn.addEventListener("click", handlePause);
 elements.resumeBtn.addEventListener("click", handleResume);
 elements.refreshBtn.addEventListener("click", loadTimeline);
+elements.forkBtn.addEventListener("click", handleForkBranch);
+elements.deleteLastBtn.addEventListener("click", handleDeleteLast);
+elements.sendInterventionBtn.addEventListener("click", handleSendIntervention);
 
 setControlsEnabled(false);
 setConnectionState("disconnected");
-setRunnerState("idle");
+syncRunnerState("idle");
 renderModelOptions([]);
+renderBranchTabs();
 applyProviderDefaults(elements.providerSelect.value);
 
 window.addEventListener("beforeunload", () => {
