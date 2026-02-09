@@ -23,25 +23,51 @@ class SessionPreferenceRepo:
         )
         return result.scalar_one_or_none()
 
-    async def upsert_output_language(
-        self, session_id: str, output_language: str
+    async def upsert_preferences(
+        self,
+        session_id: str,
+        *,
+        output_language: Optional[str] = None,
+        timeline_start_iso: Optional[str] = None,
+        timeline_step_value: Optional[int] = None,
+        timeline_step_unit: Optional[str] = None,
     ) -> SessionPreference:
-        """Insert or update output language preference."""
+        """Insert or update session preferences."""
 
         preference = await self.get_by_session(session_id)
         now = utc_now()
         if preference:
-            preference.output_language = output_language
+            if output_language is not None:
+                preference.output_language = output_language
+            if timeline_start_iso is not None:
+                preference.timeline_start_iso = timeline_start_iso
+            if timeline_step_value is not None:
+                preference.timeline_step_value = timeline_step_value
+            if timeline_step_unit is not None:
+                preference.timeline_step_unit = timeline_step_unit
             preference.updated_at = now
             await self._db.flush()
             return preference
 
         created = SessionPreference(
             session_id=session_id,
-            output_language=output_language,
+            output_language=output_language or "zh-cn",
+            timeline_start_iso=timeline_start_iso,
+            timeline_step_value=timeline_step_value or 1,
+            timeline_step_unit=timeline_step_unit or "month",
             created_at=now,
             updated_at=now,
         )
         self._db.add(created)
         await self._db.flush()
         return created
+
+    async def upsert_output_language(
+        self, session_id: str, output_language: str
+    ) -> SessionPreference:
+        """Insert or update output language preference."""
+
+        return await self.upsert_preferences(
+            session_id,
+            output_language=output_language,
+        )

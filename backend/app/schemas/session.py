@@ -15,6 +15,9 @@ class SessionCreateRequest(APIModel):
     tick_label: Optional[str] = Field(default=None)
     post_gen_delay_sec: Optional[int] = Field(default=None, ge=1, le=3600)
     output_language: Optional[str] = Field(default=None, min_length=2, max_length=20)
+    timeline_start_iso: Optional[str] = Field(default=None, min_length=10, max_length=64)
+    timeline_step_value: Optional[int] = Field(default=None, ge=1, le=1200)
+    timeline_step_unit: Optional[str] = Field(default=None, min_length=3, max_length=16)
 
 
 class SessionCreateResponse(APIModel):
@@ -23,6 +26,10 @@ class SessionCreateResponse(APIModel):
     session_id: str
     active_branch_id: str
     running: bool
+    output_language: Optional[str] = Field(default=None)
+    timeline_start_iso: Optional[str] = Field(default=None)
+    timeline_step_value: Optional[int] = Field(default=None)
+    timeline_step_unit: Optional[str] = Field(default=None)
 
 
 class SessionSettingsPatch(APIModel):
@@ -31,6 +38,9 @@ class SessionSettingsPatch(APIModel):
     tick_label: Optional[str] = Field(default=None)
     post_gen_delay_sec: Optional[int] = Field(default=None, ge=1, le=3600)
     output_language: Optional[str] = Field(default=None, min_length=2, max_length=20)
+    timeline_start_iso: Optional[str] = Field(default=None, min_length=10, max_length=64)
+    timeline_step_value: Optional[int] = Field(default=None, ge=1, le=1200)
+    timeline_step_unit: Optional[str] = Field(default=None, min_length=3, max_length=16)
 
 
 class SessionStateResponse(APIModel):

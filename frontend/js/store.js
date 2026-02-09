@@ -4,6 +4,11 @@
   branches: [],
   activeBranchId: null,
   timelineByBranch: {},
+  timelineConfig: {
+    initialTimeISO: null,
+    stepValue: 1,
+    stepUnit: "month",
+  },
   connectionState: "disconnected",
   runnerState: "idle",
   provider: {

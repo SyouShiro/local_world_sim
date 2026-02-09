@@ -36,10 +36,6 @@
         <aside class="panel">
           <h2 data-i18n="setup.section">Session Setup</h2>
           <label>
-            <span data-i18n="setup.language">Interface Language</span>
-            <select id="languageSelect"></select>
-          </label>
-          <label>
             <span data-i18n="setup.title">Title</span>
             <input id="sessionTitle" type="text" data-i18n-placeholder="setup.title_placeholder" />
           </label>
@@ -53,17 +49,48 @@
           </label>
           <div class="row">
             <label>
-              <span data-i18n="setup.tick_label">Tick label</span>
-              <input id="tickLabel" type="text" data-i18n-placeholder="setup.tick_placeholder" />
+              <span data-i18n="setup.initial_time">Initial Time</span>
+              <input id="initialTime" type="datetime-local" />
             </label>
             <label>
               <span data-i18n="setup.delay_sec">Delay (sec)</span>
               <input id="postDelay" type="number" min="1" max="3600" value="5" />
             </label>
           </div>
+          <div class="row">
+            <label>
+              <span data-i18n="setup.interval_value">Interval Value</span>
+              <input id="timeStepValue" type="number" min="1" max="1200" value="1" />
+            </label>
+            <label>
+              <span data-i18n="setup.interval_unit">Interval Unit</span>
+              <select id="timeStepUnit">
+                <option value="day">day</option>
+                <option value="week">week</option>
+                <option value="month" selected>month</option>
+                <option value="year">year</option>
+              </select>
+            </label>
+            <label>
+              <span data-i18n="setup.tick_label">Tick label</span>
+              <input id="tickLabel" type="text" readonly />
+            </label>
+          </div>
           <button id="createSession" class="primary" data-i18n="setup.create_session">
             Create Session
           </button>
+
+          <div class="divider"></div>
+
+          <h2 data-i18n="runner.section">Runner Controls</h2>
+          <div class="row controls-row">
+            <button id="startSession" class="accent" data-i18n="runner.start">Start</button>
+            <button id="pauseSession" class="ghost" data-i18n="runner.pause">Pause</button>
+            <button id="resumeSession" class="ghost" data-i18n="runner.resume">Resume</button>
+          </div>
+          <p class="hint" data-i18n="runner.hint">
+            The runner generates a report, then waits the configured delay before the next tick.
+          </p>
 
           <div class="divider"></div>
 
@@ -100,15 +127,11 @@
 
           <div class="divider"></div>
 
-          <h2 data-i18n="runner.section">Runner Controls</h2>
-          <div class="row controls-row">
-            <button id="startSession" class="accent" data-i18n="runner.start">Start</button>
-            <button id="pauseSession" class="ghost" data-i18n="runner.pause">Pause</button>
-            <button id="resumeSession" class="ghost" data-i18n="runner.resume">Resume</button>
-          </div>
-          <p class="hint" data-i18n="runner.hint">
-            The runner generates a report, then waits the configured delay before the next tick.
-          </p>
+          <h2 data-i18n="setup.language">Interface Language</h2>
+          <label>
+            <span data-i18n="setup.language">Interface Language</span>
+            <select id="languageSelect"></select>
+          </label>
         </aside>
 
         <main class="timeline">

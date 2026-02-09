@@ -43,6 +43,9 @@ import {
 const elements = {
   title: document.getElementById("sessionTitle"),
   worldPreset: document.getElementById("worldPreset"),
+  initialTime: document.getElementById("initialTime"),
+  timeStepValue: document.getElementById("timeStepValue"),
+  timeStepUnit: document.getElementById("timeStepUnit"),
   tickLabel: document.getElementById("tickLabel"),
   postDelay: document.getElementById("postDelay"),
   languageSelect: document.getElementById("languageSelect"),
@@ -131,6 +134,82 @@ function applyProviderDefaults(provider) {
   elements.baseUrl.value = defaultUrl;
 }
 
+function renderIntervalUnitOptions() {
+  const unitKeyMap = {
+    day: "setup.interval_unit_day",
+    week: "setup.interval_unit_week",
+    month: "setup.interval_unit_month",
+    year: "setup.interval_unit_year",
+  };
+  const current = elements.timeStepUnit.value || "month";
+  elements.timeStepUnit.innerHTML = "";
+  Object.entries(unitKeyMap).forEach(([value, key]) => {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = t(key);
+    if (value === current) {
+      option.selected = true;
+    }
+    elements.timeStepUnit.appendChild(option);
+  });
+}
+
+function formatIntervalLabel(stepValue, stepUnit) {
+  const count = Math.max(1, Number(stepValue || 1));
+  const unitText = t(`setup.interval_unit_${stepUnit}`);
+  const template = t("setup.interval_label");
+  return template
+    .replace("{value}", String(count))
+    .replace("{unit}", unitText);
+}
+
+function syncTickLabel() {
+  elements.tickLabel.value = formatIntervalLabel(
+    Number(elements.timeStepValue.value || 1),
+    elements.timeStepUnit.value || "month"
+  );
+}
+
+function nowLocalDateTimeInputValue() {
+  const now = new Date();
+  const offsetMs = now.getTimezoneOffset() * 60000;
+  const local = new Date(now.getTime() - offsetMs);
+  return local.toISOString().slice(0, 16);
+}
+
+function toIsoFromLocalInput(localInput) {
+  const value = String(localInput || "").trim();
+  if (!value) return null;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed.toISOString();
+}
+
+function fromIsoToLocalInput(iso) {
+  const value = String(iso || "").trim();
+  if (!value) return "";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "";
+  const offsetMs = parsed.getTimezoneOffset() * 60000;
+  const local = new Date(parsed.getTime() - offsetMs);
+  return local.toISOString().slice(0, 16);
+}
+
+function buildTimelineConfigFromInputs() {
+  const initialTimeISO = toIsoFromLocalInput(elements.initialTime.value) || new Date().toISOString();
+  const stepValue = Math.max(1, Number(elements.timeStepValue.value || 1));
+  const stepUnit = elements.timeStepUnit.value || "month";
+  return { initialTimeISO, stepValue, stepUnit };
+}
+
+function applyTimelineConfigToInputs(config) {
+  if (!config) return;
+  elements.initialTime.value = fromIsoToLocalInput(config.initialTimeISO) || nowLocalDateTimeInputValue();
+  elements.timeStepValue.value = String(Math.max(1, Number(config.stepValue || 1)));
+  elements.timeStepUnit.value = config.stepUnit || "month";
+  syncTickLabel();
+}
+
 function fillLanguageOptions() {
   elements.languageSelect.innerHTML = "";
   getSupportedLocales().forEach((locale) => {
@@ -198,7 +277,7 @@ async function loadTimeline() {
   try {
     const data = await getTimeline(store.session.session_id, store.activeBranchId);
     setTimeline(store.activeBranchId, data.messages);
-    renderTimeline(data.messages);
+    renderTimeline(data.messages, store.timelineConfig);
   } catch (err) {
     logError("error.timeline_load_failed", err);
   }
@@ -206,12 +285,16 @@ async function loadTimeline() {
 
 async function handleCreateSession() {
   try {
+    const timelineConfig = buildTimelineConfigFromInputs();
     const payload = {
       title: elements.title.value || null,
       world_preset: elements.worldPreset.value,
       tick_label: elements.tickLabel.value || null,
       post_gen_delay_sec: elements.postDelay.value ? Number(elements.postDelay.value) : null,
       output_language: getCurrentLocale(),
+      timeline_start_iso: timelineConfig.initialTimeISO,
+      timeline_step_value: timelineConfig.stepValue,
+      timeline_step_unit: timelineConfig.stepUnit,
     };
     const result = await createSession(payload);
 
@@ -223,6 +306,11 @@ async function handleCreateSession() {
       activeBranchId: result.active_branch_id,
       runnerState: "idle",
       timelineByBranch: {},
+      timelineConfig: {
+        initialTimeISO: result.timeline_start_iso || timelineConfig.initialTimeISO,
+        stepValue: result.timeline_step_value || timelineConfig.stepValue,
+        stepUnit: result.timeline_step_unit || timelineConfig.stepUnit,
+      },
       provider: {
         name: elements.providerSelect.value,
         baseUrl: elements.baseUrl.value || "",
@@ -230,6 +318,8 @@ async function handleCreateSession() {
         models: [],
       },
     });
+
+    applyTimelineConfigToInputs(store.timelineConfig);
 
     setSessionId(result.session_id);
     syncRunnerState("idle");
@@ -433,7 +523,7 @@ function handleWsEvent(event) {
   if (event.event === "message_created") {
     appendMessage(event.branch_id, event.message);
     if (event.branch_id === store.activeBranchId) {
-      appendTimelineMessage(event.message);
+      appendTimelineMessage(event.message, store.timelineConfig);
     }
     return;
   }
@@ -473,16 +563,25 @@ function handleWsEvent(event) {
 async function handleLanguageChange() {
   const nextLocale = elements.languageSelect.value;
   await setLocale(nextLocale);
+  setStore({ locale: getCurrentLocale() });
+  renderIntervalUnitOptions();
+  syncTickLabel();
   setSessionId(store.session?.session_id || null);
   syncRunnerState(store.runnerState);
   syncConnectionState(store.connectionState);
+  applyProviderDefaults(elements.providerSelect.value);
   renderModelOptions(store.provider.models || []);
   renderBranchTabs();
   const activeTimeline = store.timelineByBranch[store.activeBranchId] || [];
-  renderTimeline(activeTimeline);
+  renderTimeline(activeTimeline, store.timelineConfig);
   if (store.session?.session_id) {
     try {
-      await updateSettings(store.session.session_id, { output_language: getCurrentLocale() });
+      await updateSettings(store.session.session_id, {
+        output_language: getCurrentLocale(),
+        timeline_start_iso: store.timelineConfig?.initialTimeISO || null,
+        timeline_step_value: store.timelineConfig?.stepValue || 1,
+        timeline_step_unit: store.timelineConfig?.stepUnit || "month",
+      });
       logInfo("log.language_synced", { language: getCurrentLocale() });
     } catch (err) {
       logError("log.language_sync_failed", err);
@@ -503,9 +602,37 @@ function handleRememberApiKeyToggle() {
   logInfo("log.local_key_cleared", { provider });
 }
 
+async function handleTimelineConfigChange() {
+  syncTickLabel();
+  const config = buildTimelineConfigFromInputs();
+  setStore({ timelineConfig: config });
+  const activeTimeline = store.timelineByBranch[store.activeBranchId] || [];
+  renderTimeline(activeTimeline, store.timelineConfig);
+  if (!store.session?.session_id) return;
+  try {
+    await updateSettings(store.session.session_id, {
+      timeline_start_iso: config.initialTimeISO,
+      timeline_step_value: config.stepValue,
+      timeline_step_unit: config.stepUnit,
+      tick_label: elements.tickLabel.value,
+    });
+  } catch (_) {
+    // Keep UI responsive even if backend sync fails.
+  }
+}
+
 elements.createBtn.addEventListener("click", handleCreateSession);
 elements.languageSelect.addEventListener("change", () => {
   handleLanguageChange().catch((err) => logError("log.language_sync_failed", err));
+});
+elements.initialTime.addEventListener("change", () => {
+  handleTimelineConfigChange().catch(() => {});
+});
+elements.timeStepValue.addEventListener("change", () => {
+  handleTimelineConfigChange().catch(() => {});
+});
+elements.timeStepUnit.addEventListener("change", () => {
+  handleTimelineConfigChange().catch(() => {});
 });
 elements.providerSelect.addEventListener("change", handleProviderChange);
 elements.rememberApiKey.addEventListener("change", handleRememberApiKeyToggle);
@@ -523,9 +650,17 @@ async function bootstrap() {
   await initI18n();
   applyTranslations();
   fillLanguageOptions();
+  renderIntervalUnitOptions();
   setStore({ locale: getCurrentLocale() });
 
   elements.rememberApiKey.checked = getRememberApiKey();
+  elements.initialTime.value = nowLocalDateTimeInputValue();
+  elements.timeStepValue.value = "1";
+  elements.timeStepUnit.value = "month";
+  syncTickLabel();
+  setStore({
+    timelineConfig: buildTimelineConfigFromInputs(),
+  });
 
   setControlsEnabled(false);
   setSessionId(null);

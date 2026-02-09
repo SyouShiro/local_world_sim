@@ -1,5 +1,6 @@
 ﻿from __future__ import annotations
 
+from datetime import datetime, timezone
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -26,7 +27,9 @@ router = APIRouter(prefix="/api/session", tags=["session"])
 MAX_TITLE_LEN = 200
 MAX_PRESET_LEN = 8000
 MAX_TICK_LABEL_LEN = 50
-DEFAULT_OUTPUT_LANGUAGE = "en"
+DEFAULT_OUTPUT_LANGUAGE = "zh-cn"
+DEFAULT_TIMELINE_STEP_UNIT = "month"
+DEFAULT_TIMELINE_STEP_VALUE = 1
 
 
 @router.post("/create", response_model=SessionCreateResponse)
@@ -48,6 +51,9 @@ async def create_session(
         else settings.default_post_gen_delay_sec
     )
     output_language = _normalize_language(payload.output_language)
+    timeline_start_iso = _normalize_timeline_start(payload.timeline_start_iso)
+    timeline_step_value = payload.timeline_step_value or DEFAULT_TIMELINE_STEP_VALUE
+    timeline_step_unit = _normalize_timeline_step_unit(payload.timeline_step_unit)
 
     session_id = uuid.uuid4().hex
     branch_id = uuid.uuid4().hex
@@ -70,12 +76,22 @@ async def create_session(
             session_id=session_id,
             name="main",
         )
-        await preference_repo.upsert_output_language(session_id, output_language)
+        await preference_repo.upsert_preferences(
+            session_id,
+            output_language=output_language,
+            timeline_start_iso=timeline_start_iso,
+            timeline_step_value=timeline_step_value,
+            timeline_step_unit=timeline_step_unit,
+        )
 
     return SessionCreateResponse(
         session_id=session_id,
         active_branch_id=branch_id,
         running=False,
+        output_language=output_language,
+        timeline_start_iso=timeline_start_iso,
+        timeline_step_value=timeline_step_value,
+        timeline_step_unit=timeline_step_unit,
     )
 
 
@@ -144,6 +160,17 @@ async def update_settings(
         if payload.output_language is not None
         else None
     )
+    timeline_start_iso = (
+        _normalize_timeline_start(payload.timeline_start_iso)
+        if payload.timeline_start_iso is not None
+        else None
+    )
+    timeline_step_value = payload.timeline_step_value
+    timeline_step_unit = (
+        _normalize_timeline_step_unit(payload.timeline_step_unit)
+        if payload.timeline_step_unit is not None
+        else None
+    )
     session_repo = SessionRepo(db)
     preference_repo = SessionPreferenceRepo(db)
     async with db.begin():
@@ -156,8 +183,19 @@ async def update_settings(
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="Session not found"
             )
-        if output_language is not None:
-            await preference_repo.upsert_output_language(session_id, output_language)
+        if (
+            output_language is not None
+            or timeline_start_iso is not None
+            or timeline_step_value is not None
+            or timeline_step_unit is not None
+        ):
+            await preference_repo.upsert_preferences(
+                session_id,
+                output_language=output_language,
+                timeline_start_iso=timeline_start_iso,
+                timeline_step_value=timeline_step_value,
+                timeline_step_unit=timeline_step_unit,
+            )
 
     return SessionStateResponse(running=session.running)
 
@@ -188,3 +226,24 @@ def _normalize_language(value: str | None) -> str:
     if not normalized:
         return DEFAULT_OUTPUT_LANGUAGE
     return normalized
+
+
+def _normalize_timeline_step_unit(value: str | None) -> str:
+    normalized = (value or DEFAULT_TIMELINE_STEP_UNIT).strip().lower()
+    if normalized not in {"day", "week", "month", "year"}:
+        return DEFAULT_TIMELINE_STEP_UNIT
+    return normalized
+
+
+def _normalize_timeline_start(value: str | None) -> str:
+    raw = (value or "").strip()
+    if not raw:
+        return datetime.now(timezone.utc).isoformat()
+    candidate = raw.replace("Z", "+00:00")
+    try:
+        parsed = datetime.fromisoformat(candidate)
+    except ValueError:
+        return datetime.now(timezone.utc).isoformat()
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc).isoformat()

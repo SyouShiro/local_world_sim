@@ -50,7 +50,10 @@ class SimulationService:
                 "branch_id": session.active_branch_id,
                 "world_preset": session.world_preset,
                 "tick_label": session.tick_label,
-                "output_language": preference.output_language if preference else "en",
+                "output_language": preference.output_language if preference else "zh-cn",
+                "timeline_start_iso": preference.timeline_start_iso if preference else None,
+                "timeline_step_value": preference.timeline_step_value if preference else 1,
+                "timeline_step_unit": preference.timeline_step_unit if preference else "month",
                 "intervention_ids": [item.id for item in interventions],
             }
 
@@ -59,6 +62,9 @@ class SimulationService:
             timeline=timeline,
             interventions=interventions,
             tick_label=snapshot["tick_label"],
+            timeline_start_iso=snapshot["timeline_start_iso"],
+            timeline_step_value=snapshot["timeline_step_value"],
+            timeline_step_unit=snapshot["timeline_step_unit"],
         )
         memory_snippets = await self._memory_service.retrieve_context(
             session_id=snapshot["session_id"],
@@ -72,6 +78,9 @@ class SimulationService:
             tick_label=snapshot["tick_label"],
             memory_snippets=memory_snippets,
             output_language=snapshot["output_language"],
+            timeline_start_iso=snapshot["timeline_start_iso"],
+            timeline_step_value=snapshot["timeline_step_value"],
+            timeline_step_unit=snapshot["timeline_step_unit"],
         )
         adapter, runtime_cfg = await self._provider_service.get_generation_config(session_id)
         result = await adapter.generate(runtime_cfg, prompt_messages, stream=False)
@@ -110,6 +119,9 @@ class SimulationService:
         timeline: list[TimelineMessage],
         interventions: list[UserIntervention],
         tick_label: str,
+        timeline_start_iso: str | None,
+        timeline_step_value: int,
+        timeline_step_unit: str,
     ) -> str:
         recent_history = " ".join(item.content for item in timeline[-3:])
         pending = " ".join(item.content for item in interventions[-3:])
@@ -121,5 +133,9 @@ class SimulationService:
             "Pending interventions: "
             f"{pending}\n"
             "Time advance label: "
-            f"{tick_label}"
+            f"{tick_label}\n"
+            "Timeline start: "
+            f"{timeline_start_iso or '(auto)'}\n"
+            "Timeline step: "
+            f"{timeline_step_value} {timeline_step_unit}"
         )

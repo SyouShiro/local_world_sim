@@ -1,5 +1,5 @@
 const LOCALE_STORAGE_KEY = "worldline.locale.v1";
-const FALLBACK_LOCALE = "en";
+const FALLBACK_LOCALE = "zh-CN";
 
 let currentLocale = FALLBACK_LOCALE;
 let fallbackMessages = {};
@@ -72,8 +72,7 @@ export async function initI18n() {
   await loadRegistry();
   fallbackMessages = await loadMessages(FALLBACK_LOCALE);
 
-  const preferred =
-    localStorage.getItem(LOCALE_STORAGE_KEY) || navigator.language || FALLBACK_LOCALE;
+  const preferred = localStorage.getItem(LOCALE_STORAGE_KEY) || FALLBACK_LOCALE;
   await setLocale(preferred, { save: false });
 }
 

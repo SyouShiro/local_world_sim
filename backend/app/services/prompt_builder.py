@@ -28,6 +28,9 @@ class PromptBuilder:
         tick_label: str,
         memory_snippets: Iterable[MemorySnippet] | None = None,
         output_language: str = "en",
+        timeline_start_iso: str | None = None,
+        timeline_step_value: int = 1,
+        timeline_step_unit: str = "month",
     ) -> List[dict]:
         """Create the message list for an LLM provider."""
 
@@ -52,6 +55,9 @@ class PromptBuilder:
                 f"{world_preset}\n\n"
                 "Recent timeline:\n"
                 f"{history_text}\n\n"
+                "Timeline clock:\n"
+                f"Start at: {timeline_start_iso or '(auto)'}\n"
+                f"Step: {timeline_step_value} {timeline_step_unit}\n\n"
                 "Long-term memory context:\n"
                 f"{memory_section}\n\n"
                 "Pending interventions:\n"
@@ -65,6 +71,9 @@ class PromptBuilder:
                 f"{world_preset}\n\n"
                 "Recent timeline:\n"
                 f"{history_text}\n\n"
+                "Timeline clock:\n"
+                f"Start at: {timeline_start_iso or '(auto)'}\n"
+                f"Step: {timeline_step_value} {timeline_step_unit}\n\n"
                 "Pending interventions:\n"
                 f"{intervention_text}\n\n"
                 f"Time advance label: {tick_label}\n"

@@ -47,6 +47,9 @@ class SessionPreference(Base):
         String, ForeignKey("world_sessions.id"), primary_key=True
     )
     output_language: Mapped[str] = mapped_column(String, nullable=False, default="en")
+    timeline_start_iso: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    timeline_step_value: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    timeline_step_unit: Mapped[str] = mapped_column(String, nullable=False, default="month")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, onupdate=utc_now

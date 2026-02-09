@@ -1,4 +1,4 @@
-﻿import { t } from "./i18n.js";
+﻿import { getCurrentLocale, t } from "./i18n.js";
 
 const sessionIdEl = document.getElementById("sessionId");
 const runnerStateEl = document.getElementById("runnerState");
@@ -18,15 +18,15 @@ export function setConnectionState(state) {
   connectionStateEl.textContent = t(`state.connection.${state}`);
 }
 
-export function renderTimeline(messages) {
+export function renderTimeline(messages, timelineConfig = null) {
   timelineListEl.innerHTML = "";
   [...messages].reverse().forEach((message) => {
-    timelineListEl.appendChild(buildTimelineCard(message));
+    timelineListEl.appendChild(buildTimelineCard(message, timelineConfig));
   });
 }
 
-export function appendTimelineMessage(message) {
-  timelineListEl.prepend(buildTimelineCard(message));
+export function appendTimelineMessage(message, timelineConfig = null) {
+  timelineListEl.prepend(buildTimelineCard(message, timelineConfig));
 }
 
 export function addLog(message) {
@@ -36,10 +36,11 @@ export function addLog(message) {
   logListEl.prepend(entry);
 }
 
-function buildTimelineCard(message) {
+function buildTimelineCard(message, timelineConfig = null) {
   const roleLabel = t(`timeline.card.role.${message.role}`) || message.role;
   const parsed = message.role === "system_report" ? parseReport(message.content) : null;
   const reportTitle = parsed?.title || t("timeline.card.system_report_default_title");
+  const simulatedTime = computeSimulatedTimeLabel(message.seq, timelineConfig);
   const timeAdvance = parsed?.time_advance || message.time_jump_label || "";
 
   const item = document.createElement("div");
@@ -50,7 +51,9 @@ function buildTimelineCard(message) {
 
   const title = document.createElement("h3");
   title.className = "timeline-card-title";
-  title.textContent = `#${message.seq} · ${reportTitle}`;
+  title.textContent = simulatedTime
+    ? `#${message.seq} · ${simulatedTime} · ${reportTitle}`
+    : `#${message.seq} · ${reportTitle}`;
   head.appendChild(title);
 
   const badge = document.createElement("span");
@@ -79,10 +82,10 @@ function buildTimelineCard(message) {
     item.appendChild(createTextSection(t("timeline.card.summary"), parsed.summary));
   }
   if (parsed.events.length > 0) {
-    item.appendChild(createListSection(t("timeline.card.events"), parsed.events));
+    item.appendChild(createEventSection(t("timeline.card.events"), parsed.events));
   }
   if (parsed.risks.length > 0) {
-    item.appendChild(createListSection(t("timeline.card.risks"), parsed.risks));
+    item.appendChild(createListSection(t("timeline.card.risks"), parsed.risks.map((row) => row.description || row.label)));
   }
 
   if (!parsed.summary && parsed.events.length === 0 && parsed.risks.length === 0) {
@@ -93,6 +96,21 @@ function buildTimelineCard(message) {
 }
 
 function parseReport(content) {
+  const normalized = sanitizeReportText(content);
+  const candidates = [normalized];
+  const extracted = extractJsonObject(normalized);
+  if (extracted && extracted !== normalized) {
+    candidates.push(extracted);
+  }
+
+  for (const candidate of candidates) {
+    const parsed = parseCandidate(candidate);
+    if (parsed) return parsed;
+  }
+  return null;
+}
+
+function parseCandidate(content) {
   try {
     const payload = JSON.parse(content);
     if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
@@ -102,8 +120,8 @@ function parseReport(content) {
       title: toSafeText(payload.title),
       time_advance: toSafeText(payload.time_advance),
       summary: toSafeText(payload.summary),
-      events: normalizeList(payload.events),
-      risks: normalizeList(payload.risks),
+      events: normalizeEventList(payload.events),
+      risks: normalizeEventList(payload.risks),
     };
   } catch (_) {
     return null;
@@ -115,11 +133,30 @@ function toSafeText(value) {
   return value.trim();
 }
 
-function normalizeList(value) {
+function normalizeEventList(value) {
   if (!Array.isArray(value)) return [];
-  return value
-    .map((item) => (typeof item === "string" ? item.trim() : ""))
-    .filter(Boolean);
+  const rows = [];
+  value.forEach((item, index) => {
+    if (typeof item === "string") {
+      const description = item.trim();
+      if (!description) return;
+      rows.push({
+        label: buildTagLabel(description, index + 1),
+        description,
+      });
+      return;
+    }
+    if (item && typeof item === "object") {
+      const label = toSafeText(item.title || item.label || "");
+      const description = toSafeText(item.description || item.detail || item.content || "");
+      if (!label && !description) return;
+      rows.push({
+        label: label || buildTagLabel(description, index + 1),
+        description: description || label,
+      });
+    }
+  });
+  return rows;
 }
 
 function createSectionShell(titleText) {
@@ -151,10 +188,86 @@ function createListSection(title, rows) {
   return section;
 }
 
+function createEventSection(title, rows) {
+  const section = createSectionShell(title);
+  const wrap = document.createElement("div");
+  wrap.className = "timeline-events";
+  rows.forEach((row) => {
+    const details = document.createElement("details");
+    details.className = "timeline-event";
+    const summary = document.createElement("summary");
+    summary.textContent = row.label;
+    details.appendChild(summary);
+    const content = document.createElement("p");
+    content.textContent = row.description;
+    details.appendChild(content);
+    wrap.appendChild(details);
+  });
+  section.appendChild(wrap);
+  return section;
+}
+
 function createCodeSection(title, rawText) {
   const section = createSectionShell(title);
   const code = document.createElement("pre");
   code.textContent = rawText;
   section.appendChild(code);
   return section;
+}
+
+function buildTagLabel(text, index) {
+  if (!text) return `${t("timeline.card.event_tag")} ${index}`;
+  const first = text.split(/[.。!?！；;]/)[0].trim();
+  const compact = first.replace(/\s+/g, " ");
+  if (!compact) return `${t("timeline.card.event_tag")} ${index}`;
+  return compact.length > 18 ? `${compact.slice(0, 18)}...` : compact;
+}
+
+function sanitizeReportText(content) {
+  const raw = String(content || "").trim();
+  if (!raw) return raw;
+  if (raw.startsWith("```")) {
+    return raw
+      .replace(/^```(?:json)?\s*/i, "")
+      .replace(/\s*```$/, "")
+      .trim();
+  }
+  return raw;
+}
+
+function extractJsonObject(content) {
+  const start = content.indexOf("{");
+  const end = content.lastIndexOf("}");
+  if (start === -1 || end === -1 || end <= start) return "";
+  return content.slice(start, end + 1).trim();
+}
+
+function computeSimulatedTimeLabel(seq, timelineConfig) {
+  if (!timelineConfig || !timelineConfig.initialTimeISO) return "";
+  const base = new Date(timelineConfig.initialTimeISO);
+  if (Number.isNaN(base.getTime())) return "";
+
+  const stepValue = Math.max(1, Number(timelineConfig.stepValue || 1));
+  const offset = Math.max(0, Number(seq || 1) - 1);
+  const unit = String(timelineConfig.stepUnit || "month").toLowerCase();
+
+  const value = stepValue * offset;
+  const simulated = new Date(base.getTime());
+  if (unit === "day") {
+    simulated.setDate(simulated.getDate() + value);
+  } else if (unit === "week") {
+    simulated.setDate(simulated.getDate() + value * 7);
+  } else if (unit === "year") {
+    simulated.setFullYear(simulated.getFullYear() + value);
+  } else {
+    simulated.setMonth(simulated.getMonth() + value);
+  }
+
+  return new Intl.DateTimeFormat(getCurrentLocale(), {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(simulated);
 }
