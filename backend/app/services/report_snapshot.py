@@ -150,6 +150,56 @@ def normalize_report_snapshot(
     }
 
 
+def apply_event_impacts(snapshot: Mapping[str, Any], *, output_language: str = "en") -> dict[str, Any]:
+    """Deterministically adjust tension and focus based on rolled/generated events.
+
+    This keeps past messages stable: the adjustment is applied once when persisting the snapshot.
+    """
+
+    normalized = dict(snapshot)
+    events = normalized.get("events")
+    if not isinstance(events, Sequence) or isinstance(events, (str, bytes, bytearray)):
+        return normalized
+
+    tension = _parse_tension_percent(normalized.get("tension_percent"))
+    if tension is None:
+        tension = 50
+
+    delta = 0
+    has_negative = False
+    for item in events:
+        if not isinstance(item, Mapping):
+            continue
+        category = str(item.get("category") or "").strip().lower()
+        severity = str(item.get("severity") or "").strip().lower()
+        weight = _severity_weight(severity)
+        if category == "positive":
+            delta -= weight
+        elif category == "negative":
+            delta += weight
+            has_negative = True
+
+    tension = max(0, min(100, tension + delta))
+    normalized["tension_percent"] = tension
+
+    current_focus = _safe_text(normalized.get("crisis_focus")) or ""
+
+    # If tension is low enough, clear focus to reflect "no dominant crisis" moments.
+    if tension <= 10:
+        normalized["crisis_focus"] = ""
+        return normalized
+    if tension <= 20 and not has_negative:
+        normalized["crisis_focus"] = ""
+        return normalized
+
+    # If a high-severity negative event strongly suggests another broad topic, switch focus.
+    focus_candidate = _infer_focus_from_events(events, output_language=output_language)
+    if focus_candidate and focus_candidate != current_focus:
+        normalized["crisis_focus"] = focus_candidate
+
+    return normalized
+
+
 def snapshot_to_storage_json(snapshot: Mapping[str, Any]) -> str:
     """Serialize normalized snapshot for DB storage."""
 
@@ -259,7 +309,90 @@ def _infer_category(description: str, default_category: str) -> str:
     if any(token in text for token in _POSITIVE_HINTS):
         return "positive"
     if default_category in _VALID_CATEGORY:
-        return default_category
+        return str(default_category)
+    return "neutral"
+
+
+def _severity_weight(severity: str) -> int:
+    value = (severity or "").strip().lower()
+    if value == "low":
+        return 4
+    if value == "high":
+        return 14
+    return 8
+
+
+def _normalize_language(code: str) -> str:
+    normalized = (code or "").strip().lower().replace("_", "-")
+    if normalized in {"zh", "zh-cn", "zh-hans"}:
+        return "zh-cn"
+    return "en"
+
+
+def _infer_focus_from_events(events: Sequence[Any], *, output_language: str) -> str:
+    language = _normalize_language(output_language)
+    best_focus = ""
+    best_score = -1
+    for item in events:
+        if not isinstance(item, Mapping):
+            continue
+        category = str(item.get("category") or "").strip().lower()
+        if category != "negative":
+            continue
+        severity = str(item.get("severity") or "").strip().lower()
+        if severity != "high":
+            continue
+        description = _safe_text(item.get("description"))
+        if not description:
+            continue
+        focus = _infer_crisis_focus_from_text(description, language=language)
+        if not focus:
+            continue
+        score = 3
+        if "!" in description:
+            score += 1
+        if score > best_score:
+            best_score = score
+            best_focus = focus
+    return best_focus
+
+
+def _infer_crisis_focus_from_text(text: str, *, language: str) -> str:
+    """Infer a broad crisis noun label from free text."""
+
+    content = text.casefold()
+    if language == "zh-cn":
+        mapping: list[tuple[str, tuple[str, ...]]] = [
+            ("战争", ("战争", "战事", "入侵", "冲突", "前线", "炮击", "围城", "动员")),
+            ("瘟疫", ("瘟疫", "疫情", "疫病", "感染", "隔离", "病亡", "传播")),
+            ("饥荒", ("饥荒", "断粮", "粮荒", "歉收", "饥饿", "饥民")),
+            ("金融危机", ("金融", "通胀", "挤兑", "崩盘", "债务", "违约")),
+            ("干旱", ("干旱", "缺水", "旱灾")),
+            ("自然灾害", ("地震", "洪水", "台风", "暴雨", "火山", "雪灾", "山火", "海啸")),
+            ("人为灾害", ("污染", "泄漏", "核", "化工", "纵火", "恐袭")),
+            ("事故", ("事故", "爆炸", "坍塌", "撞击", "空难", "列车", "沉没")),
+            ("政治动荡", ("政变", "叛乱", "示威", "动荡", "暗杀", "内乱")),
+        ]
+        for focus, keys in mapping:
+            if any(key in content for key in keys):
+                return focus
+        return ""
+
+    mapping_en: list[tuple[str, tuple[str, ...]]] = [
+        ("war", ("war", "invasion", "battle", "frontline", "siege", "mobilization")),
+        ("epidemic", ("epidemic", "pandemic", "plague", "outbreak", "infection", "quarantine")),
+        ("famine", ("famine", "hunger", "starvation", "crop failure", "food shortage")),
+        ("financial crisis", ("inflation", "bank run", "default", "crash", "debt crisis")),
+        ("drought", ("drought", "water shortage")),
+        ("natural disaster", ("earthquake", "flood", "hurricane", "typhoon", "wildfire", "tsunami", "eruption")),
+        ("man-made disaster", ("pollution", "chemical leak", "nuclear", "sabotage", "terror")),
+        ("major accident", ("accident", "explosion", "collapse", "derailment", "crash", "sinking")),
+        ("political turmoil", ("coup", "uprising", "protest", "assassination", "civil unrest")),
+    ]
+    for focus, keys in mapping_en:
+        if any(key in content for key in keys):
+            return focus
+    return ""
     return "neutral"
 
 

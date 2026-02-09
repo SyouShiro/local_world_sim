@@ -11,6 +11,7 @@ from app.services.memory_service import MemoryService
 from app.services.provider_service import ProviderService
 from app.services.prompt_builder import PromptBuilder
 from app.services.report_snapshot import (
+    apply_event_impacts,
     parse_report_snapshot,
     snapshot_to_content,
     snapshot_to_storage_json,
@@ -116,6 +117,11 @@ class SimulationService:
             result.content,
             fallback_time_advance=snapshot["tick_label"],
         )
+        if snapshot_payload:
+            snapshot_payload = apply_event_impacts(
+                snapshot_payload,
+                output_language=snapshot["output_language"],
+            )
         persisted_content = (
             snapshot_to_content(snapshot_payload) if snapshot_payload else result.content
         )

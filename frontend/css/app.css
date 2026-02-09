@@ -335,6 +335,7 @@ button:disabled {
   margin: 0;
   padding: 6px 0;
   border-top: 1px solid var(--border);
+  min-height: 0;
 }
 
 .panel-section:first-child {
@@ -378,6 +379,7 @@ button:disabled {
   display: grid;
   gap: 10px;
   padding-bottom: 6px;
+  min-height: 0;
 }
 
 .hint {
@@ -780,14 +782,15 @@ button.small {
   min-height: 900px;
   height: clamp(900px, 88vh, 1320px);
   gap: 12px;
+  overflow: hidden;
 }
 
 .key-events-list {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  min-height: 240px;
-  max-height: min(60%, 620px);
+  min-height: 0;
+  max-height: clamp(200px, 44vh, 560px);
   overflow-y: auto;
   overflow-x: hidden;
   padding-right: 3px;
@@ -827,8 +830,8 @@ button.small {
   gap: 8px;
   font-size: 0.78rem;
   color: var(--muted);
-  min-height: 120px;
-  max-height: 220px;
+  min-height: 0;
+  max-height: clamp(120px, 22vh, 220px);
   overflow-y: auto;
   overflow-x: hidden;
 }
