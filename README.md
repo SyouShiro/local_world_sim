@@ -1,6 +1,18 @@
-# worldline-sim
+# 创世观察者（Worldline Sim）
 
-基于 FastAPI + SQLite + WebSocket + 原生前端的世界线模拟器。
+一个“读新闻模拟器”：你点一下开始，它就会像发月报一样，把世界线一张张递到你面前。
+
+它适合用来做两件事：
+- 把世界设定丢进去，看它自己长出历史，顺便观察“合理的意外”如何发生。
+- 像刷新闻一样读世界进展，不用写长篇小说，也能持续演化。
+
+温馨提示：如果你把时间步从 `1 天` 调到 `1 年`，你可能会在十分钟内读完几十年的兴衰，然后突然意识到自己老了。
+
+## 0. 这是什么（读新闻模拟器的工作方式）
+
+- 后端：FastAPI + SQLite + WebSocket。
+- 前端：原生 HTML/CSS/JS，把结构化报告渲染成“时间线新闻卡片”。
+- 每一步会生成一份结构化报告（标题、摘要、事件等），更利于长期记忆（RAG）与回放。
 
 ## 1. 运行前准备
 
@@ -165,7 +177,7 @@ conda run -n local_world_sim python -m pip check
 - 开发环境最简单的恢复方式是备份后删除 `worldline.db` 让其重建（会丢失历史数据）。
 - 若需要保留数据，建议用 `sqlite3` 导出/导入或补一个迁移脚本（后续可以再加 Alembic）。
 
-## 8. 长期记忆模块（LightRAG 最小实现）
+## 9. 长期记忆模块（LightRAG 最小实现）
 
 后端已内置可插拔的 Memory 模块（默认关闭）：
 - 抽象层：`MemoryService` + `Embedder` + `VectorStore`
@@ -173,7 +185,7 @@ conda run -n local_world_sim python -m pip check
 - 默认 Embedding：`deterministic`（离线、可复现）
 - 可选 Embedding：`openai`（需配置 `EMBED_OPENAI_API_KEY`）
 
-### 8.1 开关与环境变量
+### 9.1 开关与环境变量
 - `MEMORY_MODE=off|vector|hybrid`（默认 `off`，关闭时行为与旧版本一致）
 - `MEMORY_MAX_SNIPPETS=8`
 - `MEMORY_MAX_CHARS=4000`
@@ -182,17 +194,17 @@ conda run -n local_world_sim python -m pip check
 - `EMBED_DIM=...`
 - `EMBED_OPENAI_API_KEY=...`（仅 `openai` 时需要）
 
-### 8.2 分支与回滚语义
+### 9.2 分支与回滚语义
 - 检索严格按 `session_id + branch_id` 隔离。
 - `fork`：新分支继承到 fork 点的历史 memory（随后各分支独立演化）。
 - `DELETE /api/message/{session_id}/last`：会同时使该消息关联 memory 失效，避免后续召回已回滚内容。
 
-### 8.3 排障建议
+### 9.3 排障建议
 - `MEMORY_MODE=off` 可快速确认问题是否由 memory 引起。
 - `EMBED_PROVIDER=openai` 但未配置 key 时，服务会降级回 `deterministic`，不会阻断主流程。
 - 若 runner 正常但召回为空，优先检查：分支是否切换、查询文本是否过短、是否刚做过 delete-last 回滚。
 
-### 8.4 性能建议
+### 9.4 性能建议
 - 优先使用 `deterministic` 做本地开发与 CI，保证离线可测。
 - 增大 `MEMORY_MAX_SNIPPETS` 会提升上下文覆盖，但也增加提示词长度与推理成本。
 - `MEMORY_MAX_CHARS` 建议保持在 2k~6k 区间，根据模型上下文窗口调优。
