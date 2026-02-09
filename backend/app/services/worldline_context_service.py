@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Any, Iterable, Optional, Sequence
 
 from app.db.models import TimelineMessage
+from app.services.report_snapshot import parse_storage_snapshot
 
 _NEGATIVE_KEYWORDS = (
     "war",
@@ -135,7 +136,8 @@ class WorldlineContextService:
         for message in timeline:
             if message.role != "system_report":
                 continue
-            payload = self._parse_report(message.content)
+            snapshot_raw = getattr(message, "report_snapshot_json", None)
+            payload = parse_storage_snapshot(snapshot_raw) or self._parse_report(message.content)
             if not payload:
                 continue
 
@@ -408,4 +410,3 @@ class WorldlineContextService:
         if len(sentence) <= 140:
             return sentence
         return f"{sentence[:137]}..."
-

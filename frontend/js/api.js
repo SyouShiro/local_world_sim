@@ -83,6 +83,13 @@ export async function deleteLastMessage(sessionId, branchId) {
   });
 }
 
+export async function patchMessage(sessionId, messageId, payload) {
+  return request(`/api/message/${sessionId}/${messageId}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
 export async function submitIntervention(sessionId, payload) {
   return request(`/api/intervention/${sessionId}`, {
     method: "POST",

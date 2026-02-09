@@ -4,6 +4,7 @@ import {
   forkBranch,
   getCurrentProvider,
   getModels,
+  patchMessage,
   getRuntimeSettings,
   getSessionDetail,
   getTimeline,
@@ -35,17 +36,29 @@ import {
   setRememberApiKey,
 } from "./local_secrets.js";
 import { connectWebSocket, closeWebSocket } from "./ws.js";
-import { appendMessage, setBranches, setStore, setTimeline, store } from "./store.js";
+import {
+  appendMessage,
+  replaceMessage,
+  setBranches,
+  setStore,
+  setTimeline,
+  store,
+} from "./store.js";
 import {
   addLog,
   appendTimelineMessage,
   renderTimeline,
+  setTimelineEditHandler,
   setConnectionState,
   setRunnerState,
   setSessionId,
 } from "./ui.js";
 
 const elements = {
+  mainLayout: document.getElementById("mainLayout"),
+  settingsPage: document.getElementById("settingsPage"),
+  openSettingsTabBtn: document.getElementById("openSettingsTab"),
+  closeSettingsTabBtn: document.getElementById("closeSettingsTab"),
   title: document.getElementById("sessionTitle"),
   worldPreset: document.getElementById("worldPreset"),
   initialTime: document.getElementById("initialTime"),
@@ -65,7 +78,7 @@ const elements = {
   baseUrl: document.getElementById("baseUrl"),
   loadModelsBtn: document.getElementById("loadModels"),
   modelSelect: document.getElementById("modelSelect"),
-  runtimeSettingsEditor: document.getElementById("runtimeSettingsEditor"),
+  runtimeSettingsForm: document.getElementById("runtimeSettingsForm"),
   loadRuntimeSettingsBtn: document.getElementById("loadRuntimeSettings"),
   applyRuntimeSettingsBtn: document.getElementById("applyRuntimeSettings"),
   startBtn: document.getElementById("startSession"),
@@ -80,6 +93,36 @@ const elements = {
 };
 
 const LAST_SESSION_ID_KEY = "worldline.lastSessionId.v1";
+const settingsFieldOrder = [
+  "APP_ENV",
+  "APP_HOST",
+  "APP_PORT",
+  "CORS_ORIGINS",
+  "DB_URL",
+  "LOG_LEVEL",
+  "APP_SECRET_KEY",
+  "OPENAI_BASE_URL",
+  "OLLAMA_BASE_URL",
+  "DEEPSEEK_BASE_URL",
+  "GEMINI_BASE_URL",
+  "DEFAULT_POST_GEN_DELAY_SEC",
+  "DEFAULT_TICK_LABEL",
+  "MEMORY_MODE",
+  "MEMORY_MAX_SNIPPETS",
+  "MEMORY_MAX_CHARS",
+  "EMBED_PROVIDER",
+  "EMBED_MODEL",
+  "EMBED_DIM",
+  "EMBED_OPENAI_API_KEY",
+  "EVENT_DICE_ENABLED",
+  "EVENT_GOOD_EVENT_PROB",
+  "EVENT_BAD_EVENT_PROB",
+  "EVENT_MIN_EVENTS",
+  "EVENT_MAX_EVENTS",
+  "EVENT_DEFAULT_HEMISPHERE",
+];
+const hiddenSettingsKeys = new Set(["APP_SECRET_KEY", "EMBED_OPENAI_API_KEY"]);
+let runtimeSettingsSnapshot = {};
 
 const providerDefaults = {
   openai: "https://api.openai.com",
@@ -393,20 +436,161 @@ async function tryRebindProviderToSession(sessionId) {
   }
 }
 
-function parseRuntimeSettingsEditor() {
-  const raw = String(elements.runtimeSettingsEditor.value || "").trim();
-  if (!raw) return {};
-  const parsed = JSON.parse(raw);
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new Error("invalid settings payload");
+function setSettingsPageOpen(opened) {
+  elements.mainLayout.classList.toggle("is-hidden", opened);
+  elements.settingsPage.classList.toggle("is-hidden", !opened);
+}
+
+function normalizeSettingsEntries(settings) {
+  const map = settings && typeof settings === "object" ? settings : {};
+  const rows = Object.entries(map);
+  rows.sort(([left], [right]) => {
+    const leftOrder = settingsFieldOrder.indexOf(left);
+    const rightOrder = settingsFieldOrder.indexOf(right);
+    const normalizedLeft = leftOrder === -1 ? Number.MAX_SAFE_INTEGER : leftOrder;
+    const normalizedRight = rightOrder === -1 ? Number.MAX_SAFE_INTEGER : rightOrder;
+    if (normalizedLeft !== normalizedRight) {
+      return normalizedLeft - normalizedRight;
+    }
+    return left.localeCompare(right);
+  });
+  return rows;
+}
+
+function detectSettingType(value) {
+  if (typeof value === "boolean") return "bool";
+  if (typeof value === "number") {
+    return Number.isInteger(value) ? "int" : "float";
   }
-  if (parsed.updates && typeof parsed.updates === "object" && !Array.isArray(parsed.updates)) {
-    return parsed.updates;
+  if (Array.isArray(value) || (value && typeof value === "object")) return "json";
+  return "string";
+}
+
+function getSettingDescription(settingKey) {
+  const key = `settings.desc.${settingKey}`;
+  const translated = t(key);
+  if (translated !== key) {
+    return translated;
   }
-  if (parsed.settings && typeof parsed.settings === "object" && !Array.isArray(parsed.settings)) {
-    return parsed.settings;
+  return t("settings.desc.default");
+}
+
+function createSettingInput(settingKey, value) {
+  const type = detectSettingType(value);
+
+  if (type === "bool") {
+    const select = document.createElement("select");
+    select.dataset.settingKey = settingKey;
+    select.dataset.settingType = type;
+
+    const trueOption = document.createElement("option");
+    trueOption.value = "true";
+    trueOption.textContent = t("settings.value.true");
+    select.appendChild(trueOption);
+
+    const falseOption = document.createElement("option");
+    falseOption.value = "false";
+    falseOption.textContent = t("settings.value.false");
+    select.appendChild(falseOption);
+
+    select.value = value ? "true" : "false";
+    return select;
   }
-  return parsed;
+
+  const baseInput =
+    type === "json" || (typeof value === "string" && String(value).length > 120)
+      ? document.createElement("textarea")
+      : document.createElement("input");
+  baseInput.dataset.settingKey = settingKey;
+  baseInput.dataset.settingType = type;
+  if (type === "int" || type === "float") {
+    baseInput.type = "number";
+    if (type === "float") {
+      baseInput.step = "0.01";
+    }
+  }
+
+  if (baseInput.tagName === "TEXTAREA") {
+    baseInput.rows = 3;
+  }
+
+  if (hiddenSettingsKeys.has(settingKey)) {
+    if (baseInput.tagName === "INPUT") {
+      baseInput.type = "password";
+    }
+  }
+
+  if (type === "json") {
+    baseInput.value = JSON.stringify(value, null, 2);
+  } else if (value === null || value === undefined) {
+    baseInput.value = "";
+  } else {
+    baseInput.value = String(value);
+  }
+  return baseInput;
+}
+
+function renderRuntimeSettingsForm(settings) {
+  elements.runtimeSettingsForm.innerHTML = "";
+  const rows = normalizeSettingsEntries(settings);
+  rows.forEach(([settingKey, value]) => {
+    const item = document.createElement("article");
+    item.className = "setting-item";
+
+    const heading = document.createElement("h3");
+    heading.textContent = settingKey;
+    item.appendChild(heading);
+
+    const desc = document.createElement("p");
+    desc.textContent = getSettingDescription(settingKey);
+    item.appendChild(desc);
+
+    const input = createSettingInput(settingKey, value);
+    item.appendChild(input);
+    elements.runtimeSettingsForm.appendChild(item);
+  });
+}
+
+function parseRuntimeSettingInput(input) {
+  const type = input.dataset.settingType || "string";
+  const raw = String(input.value || "").trim();
+
+  if (type === "bool") {
+    return raw === "true";
+  }
+  if (type === "int") {
+    if (!raw) {
+      throw new Error(`empty integer for ${input.dataset.settingKey}`);
+    }
+    const parsed = Number.parseInt(raw, 10);
+    if (Number.isNaN(parsed)) throw new Error(`invalid integer for ${input.dataset.settingKey}`);
+    return parsed;
+  }
+  if (type === "float") {
+    if (!raw) {
+      throw new Error(`empty number for ${input.dataset.settingKey}`);
+    }
+    const parsed = Number.parseFloat(raw);
+    if (Number.isNaN(parsed)) throw new Error(`invalid number for ${input.dataset.settingKey}`);
+    return parsed;
+  }
+  if (type === "json") {
+    if (!raw) return {};
+    return JSON.parse(raw);
+  }
+  return raw;
+}
+
+function collectRuntimeSettingsUpdates() {
+  const updates = {};
+  elements.runtimeSettingsForm
+    .querySelectorAll("[data-setting-key]")
+    .forEach((node) => {
+      const key = node.dataset.settingKey;
+      if (!key) return;
+      updates[key] = parseRuntimeSettingInput(node);
+    });
+  return updates;
 }
 
 function saveLastSessionId(sessionId) {
@@ -562,7 +746,8 @@ async function handleLoadSession() {
 async function handleLoadRuntimeSettings() {
   try {
     const response = await getRuntimeSettings();
-    elements.runtimeSettingsEditor.value = JSON.stringify(response.settings || {}, null, 2);
+    runtimeSettingsSnapshot = response.settings || {};
+    renderRuntimeSettingsForm(runtimeSettingsSnapshot);
     logInfo("log.runtime_settings_loaded");
   } catch (err) {
     logError("error.runtime_settings_load_failed", err);
@@ -571,9 +756,10 @@ async function handleLoadRuntimeSettings() {
 
 async function handleApplyRuntimeSettings() {
   try {
-    const updates = parseRuntimeSettingsEditor();
+    const updates = collectRuntimeSettingsUpdates();
     const response = await patchRuntimeSettings({ updates });
-    elements.runtimeSettingsEditor.value = JSON.stringify(response.settings || {}, null, 2);
+    runtimeSettingsSnapshot = response.settings || {};
+    renderRuntimeSettingsForm(runtimeSettingsSnapshot);
     logInfo("log.runtime_settings_applied");
   } catch (err) {
     logError("error.runtime_settings_apply_failed", err);
@@ -805,6 +991,34 @@ async function handleSendIntervention() {
   }
 }
 
+async function handleEditTimelineMessage(message, payload) {
+  if (!store.session || !message?.id) return;
+  const requestPayload = {
+    ...(payload || {}),
+    branch_id: message.branch_id || store.activeBranchId,
+  };
+  try {
+    const response = await patchMessage(
+      store.session.session_id,
+      message.id,
+      requestPayload
+    );
+    const updated = response?.message;
+    if (!updated) {
+      await loadTimeline();
+      return;
+    }
+    replaceMessage(updated.branch_id, updated);
+    if (updated.branch_id === store.activeBranchId) {
+      const activeTimeline = store.timelineByBranch[updated.branch_id] || [];
+      renderTimeline(activeTimeline, store.timelineConfig);
+    }
+    logInfo("log.message_updated", { seq: updated.seq });
+  } catch (err) {
+    logError("error.message_update_failed", err);
+  }
+}
+
 function handleWsEvent(event) {
   if (event.event === "session_state") {
     syncRunnerState(event.running ? "running" : "paused");
@@ -814,7 +1028,8 @@ function handleWsEvent(event) {
   if (event.event === "message_created") {
     appendMessage(event.branch_id, event.message);
     if (event.branch_id === store.activeBranchId) {
-      appendTimelineMessage(event.message, store.timelineConfig);
+      const activeTimeline = store.timelineByBranch[event.branch_id] || [];
+      appendTimelineMessage(event.message, store.timelineConfig, activeTimeline);
     }
     return;
   }
@@ -856,6 +1071,17 @@ function handleWsEvent(event) {
 
   if (event.event === "error") {
     logInfo("error.runner_error", { error: event.message || "unknown" });
+    return;
+  }
+
+  if (event.event === "message_updated") {
+    const updated = event.message;
+    if (!updated?.id || !event.branch_id) return;
+    replaceMessage(event.branch_id, updated);
+    if (event.branch_id === store.activeBranchId) {
+      const activeTimeline = store.timelineByBranch[event.branch_id] || [];
+      renderTimeline(activeTimeline, store.timelineConfig);
+    }
   }
 }
 
@@ -877,6 +1103,9 @@ async function handleLanguageChange() {
   renderBranchTabs();
   const activeTimeline = store.timelineByBranch[store.activeBranchId] || [];
   renderTimeline(activeTimeline, store.timelineConfig);
+  if (Object.keys(runtimeSettingsSnapshot).length > 0) {
+    renderRuntimeSettingsForm(runtimeSettingsSnapshot);
+  }
   handleRefreshSessionHistory().catch(() => {});
   if (store.session?.session_id) {
     try {
@@ -925,9 +1154,25 @@ async function handleTimelineConfigChange() {
   }
 }
 
+async function handleOpenSettingsTab() {
+  setSettingsPageOpen(true);
+  if (Object.keys(runtimeSettingsSnapshot).length > 0) {
+    return;
+  }
+  await handleLoadRuntimeSettings();
+}
+
+function handleCloseSettingsTab() {
+  setSettingsPageOpen(false);
+}
+
 elements.createBtn.addEventListener("click", handleCreateSession);
 elements.loadSessionBtn.addEventListener("click", handleLoadSession);
 elements.refreshSessionHistoryBtn.addEventListener("click", handleRefreshSessionHistory);
+elements.openSettingsTabBtn.addEventListener("click", () => {
+  handleOpenSettingsTab().catch((err) => logError("error.runtime_settings_load_failed", err));
+});
+elements.closeSettingsTabBtn.addEventListener("click", handleCloseSettingsTab);
 elements.languageSelect.addEventListener("change", () => {
   handleLanguageChange().catch((err) => logError("log.language_sync_failed", err));
 });
@@ -953,6 +1198,7 @@ elements.deleteLastBtn.addEventListener("click", handleDeleteLast);
 elements.sendInterventionBtn.addEventListener("click", handleSendIntervention);
 elements.loadRuntimeSettingsBtn.addEventListener("click", handleLoadRuntimeSettings);
 elements.applyRuntimeSettingsBtn.addEventListener("click", handleApplyRuntimeSettings);
+setTimelineEditHandler((message, payload) => handleEditTimelineMessage(message, payload));
 
 async function bootstrap() {
   await initI18n();
@@ -972,7 +1218,9 @@ async function bootstrap() {
   });
 
   elements.loadSessionId.value = loadLastSessionId();
-  elements.runtimeSettingsEditor.value = "{}";
+  runtimeSettingsSnapshot = {};
+  renderRuntimeSettingsForm({});
+  setSettingsPageOpen(false);
   setControlsEnabled(false);
   setSessionId(null);
   syncConnectionState("disconnected");

@@ -16,94 +16,33 @@
             Create a world, let it evolve, and track each tick as a structured report.
           </p>
         </div>
-        <div class="hero-status">
-          <div class="status-card">
-            <span data-i18n="status.session">Session</span>
-            <strong id="sessionId">Not created</strong>
+        <div class="hero-right">
+          <div class="hero-status">
+            <div class="status-card">
+              <span data-i18n="status.session">Session</span>
+              <strong id="sessionId">Not created</strong>
+            </div>
+            <div class="status-card">
+              <span data-i18n="status.runner">Runner</span>
+              <strong id="runnerState">idle</strong>
+            </div>
+            <div class="status-card">
+              <span data-i18n="status.websocket">WebSocket</span>
+              <strong id="connectionState">disconnected</strong>
+            </div>
           </div>
-          <div class="status-card">
-            <span data-i18n="status.runner">Runner</span>
-            <strong id="runnerState">idle</strong>
-          </div>
-          <div class="status-card">
-            <span data-i18n="status.websocket">WebSocket</span>
-            <strong id="connectionState">disconnected</strong>
+          <div class="hero-actions">
+            <button id="openSettingsTab" class="ghost tab-button" data-i18n="settings.open_tab">
+              Settings
+            </button>
           </div>
         </div>
       </header>
 
-      <section class="layout">
+      <section id="mainLayout" class="layout">
         <aside class="panel">
-          <h2 data-i18n="setup.section">Session Setup</h2>
-          <label>
-            <span data-i18n="setup.title">Title</span>
-            <input id="sessionTitle" type="text" data-i18n-placeholder="setup.title_placeholder" />
-          </label>
-          <label>
-            <span data-i18n="setup.world_preset">World preset</span>
-            <textarea
-              id="worldPreset"
-              rows="6"
-              data-i18n-placeholder="setup.world_preset_placeholder"
-            ></textarea>
-          </label>
-          <div class="row">
-            <label>
-              <span data-i18n="setup.initial_time">Initial Time</span>
-              <input id="initialTime" type="datetime-local" />
-            </label>
-            <label>
-              <span data-i18n="setup.delay_sec">Delay (sec)</span>
-              <input id="postDelay" type="number" min="1" max="3600" value="5" />
-            </label>
-          </div>
-          <div class="row">
-            <label>
-              <span data-i18n="setup.interval_value">Interval Value</span>
-              <input id="timeStepValue" type="number" min="1" max="1200" value="1" />
-            </label>
-            <label>
-              <span data-i18n="setup.interval_unit">Interval Unit</span>
-              <select id="timeStepUnit">
-                <option value="day">day</option>
-                <option value="week">week</option>
-                <option value="month" selected>month</option>
-                <option value="year">year</option>
-              </select>
-            </label>
-            <label>
-              <span data-i18n="setup.tick_label">Tick label</span>
-              <input id="tickLabel" type="text" readonly />
-            </label>
-          </div>
-          <button id="createSession" class="primary" data-i18n="setup.create_session">
-            Create Session
-          </button>
-          <div class="row align-end">
-            <label>
-              <span data-i18n="setup.load_session_id">Session ID</span>
-              <input
-                id="loadSessionId"
-                type="text"
-                data-i18n-placeholder="setup.load_session_id_placeholder"
-              />
-            </label>
-            <button id="loadSession" class="ghost" data-i18n="setup.load_session">
-              Load Session
-            </button>
-          </div>
-          <h2 data-i18n="setup.history_section">History Sessions</h2>
-          <div class="row controls-row">
-            <button id="refreshSessionHistory" class="ghost" data-i18n="setup.refresh_history">
-              Refresh History
-            </button>
-          </div>
-          <div id="sessionHistoryList" class="session-history-list"></div>
-
-          <div class="divider"></div>
-
           <h2 data-i18n="runner.section">Runner Controls</h2>
-          <div class="row controls-row">
+          <div class="row controls-row row-3">
             <button id="startSession" class="accent" data-i18n="runner.start">Start</button>
             <button id="pauseSession" class="ghost" data-i18n="runner.pause">Pause</button>
             <button id="resumeSession" class="ghost" data-i18n="runner.resume">Resume</button>
@@ -147,26 +86,71 @@
 
           <div class="divider"></div>
 
-          <h2 data-i18n="settings.section">Settings</h2>
-          <p class="hint" data-i18n="settings.hint">
-            Load and patch runtime settings without restart.
-          </p>
-          <div class="row controls-row">
-            <button id="loadRuntimeSettings" class="ghost" data-i18n="settings.load">
-              Load Settings
-            </button>
-            <button id="applyRuntimeSettings" class="accent" data-i18n="settings.apply">
-              Apply Settings
-            </button>
-          </div>
+          <h2 data-i18n="setup.section">Session Setup</h2>
           <label>
-            <span data-i18n="settings.editor_label">Runtime settings JSON</span>
+            <span data-i18n="setup.title">Title</span>
+            <input id="sessionTitle" type="text" data-i18n-placeholder="setup.title_placeholder" />
+          </label>
+          <label>
+            <span data-i18n="setup.world_preset">World preset</span>
             <textarea
-              id="runtimeSettingsEditor"
-              rows="8"
-              data-i18n-placeholder="settings.editor_placeholder"
+              id="worldPreset"
+              rows="6"
+              data-i18n-placeholder="setup.world_preset_placeholder"
             ></textarea>
           </label>
+          <div class="row row-2">
+            <label>
+              <span data-i18n="setup.initial_time">Initial Time</span>
+              <input id="initialTime" type="datetime-local" />
+            </label>
+            <label>
+              <span data-i18n="setup.delay_sec">Delay (sec)</span>
+              <input id="postDelay" type="number" min="1" max="3600" value="5" />
+            </label>
+          </div>
+          <div class="row row-3">
+            <label>
+              <span data-i18n="setup.interval_value">Interval Value</span>
+              <input id="timeStepValue" type="number" min="1" max="1200" value="1" />
+            </label>
+            <label>
+              <span data-i18n="setup.interval_unit">Interval Unit</span>
+              <select id="timeStepUnit">
+                <option value="day">day</option>
+                <option value="week">week</option>
+                <option value="month" selected>month</option>
+                <option value="year">year</option>
+              </select>
+            </label>
+            <label>
+              <span data-i18n="setup.tick_label">Tick label</span>
+              <input id="tickLabel" type="text" readonly />
+            </label>
+          </div>
+          <button id="createSession" class="primary" data-i18n="setup.create_session">
+            Create Session
+          </button>
+          <div class="row align-end row-2">
+            <label>
+              <span data-i18n="setup.load_session_id">Session ID</span>
+              <input
+                id="loadSessionId"
+                type="text"
+                data-i18n-placeholder="setup.load_session_id_placeholder"
+              />
+            </label>
+            <button id="loadSession" class="ghost" data-i18n="setup.load_session">
+              Load Session
+            </button>
+          </div>
+          <h2 data-i18n="setup.history_section">History Sessions</h2>
+          <div class="row controls-row">
+            <button id="refreshSessionHistory" class="ghost" data-i18n="setup.refresh_history">
+              Refresh History
+            </button>
+          </div>
+          <div id="sessionHistoryList" class="session-history-list"></div>
 
           <div class="divider"></div>
 
@@ -207,10 +191,32 @@
           </div>
         </main>
 
-        <aside class="panel log-panel">
+        <aside class="panel side-panel">
+          <h2 data-i18n="sidebar.key_events">Key Events Timeline</h2>
+          <div id="keyEventsList" class="key-events-list"></div>
+          <div class="divider"></div>
           <h2 data-i18n="log.section">System Log</h2>
           <div id="logList" class="log-list"></div>
         </aside>
+      </section>
+
+      <section id="settingsPage" class="settings-page is-hidden">
+        <div class="settings-page-header">
+          <h2 data-i18n="settings.section">Settings</h2>
+          <button id="closeSettingsTab" class="ghost" data-i18n="settings.back">Back</button>
+        </div>
+        <p class="hint" data-i18n="settings.hint">
+          Load and patch runtime settings without restart.
+        </p>
+        <div class="row controls-row row-2">
+          <button id="loadRuntimeSettings" class="ghost" data-i18n="settings.load">
+            Load Settings
+          </button>
+          <button id="applyRuntimeSettings" class="accent" data-i18n="settings.apply">
+            Apply Settings
+          </button>
+        </div>
+        <div id="runtimeSettingsForm" class="settings-form-grid"></div>
       </section>
     </div>
 

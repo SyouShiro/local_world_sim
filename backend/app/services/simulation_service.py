@@ -10,6 +10,11 @@ from app.services.event_dice import EventDiceService
 from app.services.memory_service import MemoryService
 from app.services.provider_service import ProviderService
 from app.services.prompt_builder import PromptBuilder
+from app.services.report_snapshot import (
+    parse_report_snapshot,
+    snapshot_to_content,
+    snapshot_to_storage_json,
+)
 from app.services.worldline_context_service import WorldlineContextService
 
 
@@ -106,6 +111,16 @@ class SimulationService:
         )
         adapter, runtime_cfg = await self._provider_service.get_generation_config(session_id)
         result = await adapter.generate(runtime_cfg, prompt_messages, stream=False)
+        snapshot_payload = parse_report_snapshot(
+            result.content,
+            fallback_time_advance=snapshot["tick_label"],
+        )
+        persisted_content = (
+            snapshot_to_content(snapshot_payload) if snapshot_payload else result.content
+        )
+        snapshot_json = (
+            snapshot_to_storage_json(snapshot_payload) if snapshot_payload else None
+        )
 
         async with self._sessionmaker() as db:
             message_repo = MessageRepo(db)
@@ -115,12 +130,13 @@ class SimulationService:
                     session_id=snapshot["session_id"],
                     branch_id=snapshot["branch_id"],
                     role="system_report",
-                    content=result.content,
+                    content=persisted_content,
                     time_jump_label=snapshot["tick_label"],
                     model_provider=result.model_provider,
                     model_name=result.model_name,
                     token_in=result.token_in,
                     token_out=result.token_out,
+                    report_snapshot_json=snapshot_json,
                 )
                 await message_repo.mark_interventions_consumed(snapshot["intervention_ids"])
                 await self._memory_service.remember_message(message=message, db=db)

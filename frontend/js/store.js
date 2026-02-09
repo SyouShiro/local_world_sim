@@ -38,3 +38,11 @@ export function appendMessage(branchId, message) {
   }
   store.timelineByBranch[branchId].push(message);
 }
+
+export function replaceMessage(branchId, message) {
+  const list = store.timelineByBranch[branchId];
+  if (!Array.isArray(list)) return;
+  const index = list.findIndex((item) => item.id === message.id);
+  if (index === -1) return;
+  list[index] = message;
+}

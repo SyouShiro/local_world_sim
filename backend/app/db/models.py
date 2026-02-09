@@ -87,6 +87,9 @@ class TimelineMessage(Base):
     model_name: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     token_in: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     token_out: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    report_snapshot_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    is_user_edited: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    edited_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
 

@@ -35,6 +35,8 @@ class MessageRepo:
         model_name: Optional[str],
         token_in: Optional[int],
         token_out: Optional[int],
+        report_snapshot_json: Optional[str] = None,
+        is_user_edited: bool = False,
     ) -> TimelineMessage:
         """Insert a new timeline message with an incremented sequence number."""
 
@@ -53,6 +55,9 @@ class MessageRepo:
                     model_name=model_name,
                     token_in=token_in,
                     token_out=token_out,
+                    report_snapshot_json=report_snapshot_json,
+                    is_user_edited=is_user_edited,
+                    edited_at=None,
                     created_at=utc_now(),
                 )
                 self._db.add(message)
@@ -195,6 +200,9 @@ class MessageRepo:
                 model_name=source.model_name,
                 token_in=source.token_in,
                 token_out=source.token_out,
+                report_snapshot_json=source.report_snapshot_json,
+                is_user_edited=source.is_user_edited,
+                edited_at=source.edited_at,
                 created_at=utc_now(),
             )
             self._db.add(copied)

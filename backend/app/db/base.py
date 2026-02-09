@@ -51,6 +51,24 @@ async def _migrate_sqlite_schema(conn) -> None:
         column_name="timeline_step_unit",
         column_definition="timeline_step_unit TEXT NOT NULL DEFAULT 'month'",
     )
+    await _ensure_sqlite_column(
+        conn,
+        table_name="timeline_messages",
+        column_name="report_snapshot_json",
+        column_definition="report_snapshot_json TEXT",
+    )
+    await _ensure_sqlite_column(
+        conn,
+        table_name="timeline_messages",
+        column_name="is_user_edited",
+        column_definition="is_user_edited INTEGER NOT NULL DEFAULT 0",
+    )
+    await _ensure_sqlite_column(
+        conn,
+        table_name="timeline_messages",
+        column_name="edited_at",
+        column_definition="edited_at DATETIME",
+    )
 
 
 async def _ensure_sqlite_column(
