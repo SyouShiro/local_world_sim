@@ -53,39 +53,6 @@
 
           <div class="divider"></div>
 
-          <h2 data-i18n="provider.section">Provider</h2>
-          <label>
-            <span data-i18n="provider.provider">Provider</span>
-            <select id="providerSelect">
-              <option value="openai">OpenAI</option>
-              <option value="ollama">Ollama</option>
-              <option value="deepseek">DeepSeek</option>
-              <option value="gemini">Gemini</option>
-            </select>
-          </label>
-          <label>
-            <span data-i18n="provider.api_key">API key</span>
-            <input id="apiKey" type="password" data-i18n-placeholder="provider.api_key_placeholder" />
-          </label>
-          <label class="inline-option">
-            <input id="rememberApiKey" type="checkbox" />
-            <span data-i18n="provider.remember_key">Remember API key on this device</span>
-          </label>
-          <p class="hint" data-i18n="provider.remember_hint">
-            Stored in this browser only, not tracked by git.
-          </p>
-          <label>
-            <span data-i18n="provider.base_url">Base URL</span>
-            <input id="baseUrl" type="text" data-i18n-placeholder="provider.base_url_placeholder" />
-          </label>
-          <button id="loadModels" class="ghost" data-i18n="provider.load_models">Load Models</button>
-          <label>
-            <span data-i18n="provider.model">Model</span>
-            <select id="modelSelect"></select>
-          </label>
-
-          <div class="divider"></div>
-
           <h2 data-i18n="setup.section">Session Setup</h2>
           <label>
             <span data-i18n="setup.title">Title</span>
@@ -135,6 +102,43 @@
           <button id="createSession" class="primary" data-i18n="setup.create_session">
             Create Session
           </button>
+
+          <div class="divider"></div>
+
+          <h2 data-i18n="provider.section">Provider</h2>
+          <label>
+            <span data-i18n="provider.provider">Provider</span>
+            <select id="providerSelect">
+              <option value="openai">OpenAI</option>
+              <option value="ollama">Ollama</option>
+              <option value="deepseek">DeepSeek</option>
+              <option value="gemini">Gemini</option>
+            </select>
+          </label>
+          <label>
+            <span data-i18n="provider.api_key">API key</span>
+            <input id="apiKey" type="password" data-i18n-placeholder="provider.api_key_placeholder" />
+          </label>
+          <label class="inline-option">
+            <input id="rememberApiKey" type="checkbox" />
+            <span data-i18n="provider.remember_key">Remember API key on this device</span>
+          </label>
+          <p class="hint" data-i18n="provider.remember_hint">
+            Stored in this browser only, not tracked by git.
+          </p>
+          <label>
+            <span data-i18n="provider.base_url">Base URL</span>
+            <input id="baseUrl" type="text" data-i18n-placeholder="provider.base_url_placeholder" />
+          </label>
+          <button id="loadModels" class="ghost" data-i18n="provider.load_models">Load Models</button>
+          <label>
+            <span data-i18n="provider.model">Model</span>
+            <select id="modelSelect"></select>
+          </label>
+
+          <div class="divider"></div>
+
+          <h2 data-i18n="setup.history_section">History Sessions</h2>
           <div class="row align-end row-2">
             <label>
               <span data-i18n="setup.load_session_id">Session ID</span>
@@ -148,7 +152,6 @@
               Load Session
             </button>
           </div>
-          <h2 data-i18n="setup.history_section">History Sessions</h2>
           <div class="row controls-row">
             <button id="refreshSessionHistory" class="ghost" data-i18n="setup.refresh_history">
               Refresh History

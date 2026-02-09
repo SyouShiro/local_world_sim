@@ -36,7 +36,7 @@
   "setup.title_placeholder": "例如：蒸汽之城",
   "setup.world_preset_placeholder": "描述世界的初始状态……",
   "setup.tick_placeholder": "1个月",
-  "provider.section": "模型服务",
+  "provider.section": "模型服务选择",
   "provider.provider": "提供商",
   "provider.api_key": "API Key",
   "provider.base_url": "Base URL",
