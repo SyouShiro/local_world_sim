@@ -79,6 +79,7 @@ class SimulationService:
                 timeline_step_value=snapshot["timeline_step_value"],
                 timeline_step_unit=snapshot["timeline_step_unit"],
                 next_seq=next_seq,
+                output_language=snapshot["output_language"],
             )
             worldline_context = self._worldline_context_service.build_context(timeline)
 

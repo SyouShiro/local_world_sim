@@ -82,6 +82,7 @@
   "settings.desc.EVENT_DICE_ENABLED": "是否启用事件骰子系统。",
   "settings.desc.EVENT_GOOD_EVENT_PROB": "好事件基础概率（0-1）。",
   "settings.desc.EVENT_BAD_EVENT_PROB": "恶性事件基础概率（0-1）。",
+  "settings.desc.EVENT_REBEL_PROB": "逆反概率（0-1）：在好/坏事件里插入非危机焦点类型的概率。",
   "settings.desc.EVENT_MIN_EVENTS": "每轮最少事件数。",
   "settings.desc.EVENT_MAX_EVENTS": "每轮最多事件数。",
   "settings.desc.EVENT_DEFAULT_HEMISPHERE": "季节默认半球（north/south）。",

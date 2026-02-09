@@ -131,6 +131,21 @@ const providerDefaults = {
   gemini: "https://generativelanguage.googleapis.com",
 };
 
+function setRunnerControlHighlight(activeButton) {
+  const buttons = [elements.startBtn, elements.pauseBtn, elements.resumeBtn].filter(Boolean);
+  buttons.forEach((button) => {
+    button.classList.remove("accent");
+    if (!button.classList.contains("ghost")) {
+      button.classList.add("ghost");
+    }
+    button.setAttribute("aria-pressed", "false");
+  });
+  if (!activeButton) return;
+  activeButton.classList.remove("ghost");
+  activeButton.classList.add("accent");
+  activeButton.setAttribute("aria-pressed", "true");
+}
+
 function syncRunnerState(state) {
   setStore({ runnerState: state });
   setRunnerState(state);
@@ -948,6 +963,7 @@ async function handleModelChange() {
 
 async function handleStart() {
   if (!store.session) return;
+  setRunnerControlHighlight(elements.startBtn);
   try {
     const state = await startSession(store.session.session_id);
     syncRunnerState(state.running ? "running" : "idle");
@@ -959,6 +975,7 @@ async function handleStart() {
 
 async function handlePause() {
   if (!store.session) return;
+  setRunnerControlHighlight(elements.pauseBtn);
   try {
     const state = await pauseSession(store.session.session_id);
     syncRunnerState(state.running ? "running" : "paused");
@@ -970,6 +987,7 @@ async function handlePause() {
 
 async function handleResume() {
   if (!store.session) return;
+  setRunnerControlHighlight(elements.resumeBtn);
   try {
     const state = await resumeSession(store.session.session_id);
     syncRunnerState(state.running ? "running" : "idle");
@@ -1263,6 +1281,7 @@ async function bootstrap() {
   elements.timeStepValue.value = "1";
   elements.timeStepUnit.value = "month";
   syncTickLabel();
+  setRunnerControlHighlight(elements.startBtn);
   setStore({
     timelineConfig: buildTimelineConfigFromInputs(),
   });

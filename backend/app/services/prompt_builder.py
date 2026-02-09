@@ -159,11 +159,32 @@ class PromptBuilder:
             if plan.negative_min_count > 0
             else "Negative intensity guidance: keep adverse events plausible but proportionate."
         )
+        slot_lines: list[str] = []
+        for idx, slot in enumerate(plan.event_slots, start=1):
+            rebellion_note = " (rebellious: NOT about crisis_focus)" if slot.rebellious else ""
+            slot_lines.append(
+                f"{idx}. category={slot.category}, severity={slot.severity}, topic={slot.topic}{rebellion_note}"
+            )
+        slots_text = "\n".join(slot_lines) if slot_lines else "(none)"
+        focus_text = plan.crisis_focus.strip()
+        focus_guidance = (
+            f"Crisis focus for this tick: {focus_text}. "
+            "You must output crisis_focus exactly as this broad noun label."
+            if focus_text
+            else "Crisis focus: choose a broad noun label."
+        )
+        rebellion_guidance = (
+            "Rebel probability is enabled: if a slot is marked rebellious, "
+            "its topic must be different from crisis_focus."
+            if any(slot.rebellious for slot in plan.event_slots)
+            else "No rebellious slots rolled this tick."
+        )
         return (
-            f"Target event count: {plan.target_event_count} (1-5).\n"
-            f"Minimum positive events: {plan.positive_min_count}.\n"
-            f"Minimum negative events: {plan.negative_min_count}.\n"
-            f"Minimum neutral events: {plan.neutral_min_count}.\n"
+            f"Target event count: {plan.target_event_count} (MUST match exactly; 1-5).\n"
+            f"{focus_guidance}\n"
+            "Fill the following event slots exactly (same count and order):\n"
+            f"{slots_text}\n"
+            f"{rebellion_guidance}\n"
             f"Season hint: {plan.season_hint}\n"
             f"Geopolitical hint: {plan.geopolitical_hint}\n"
             f"Scale hint: {plan.scale_hint}\n"

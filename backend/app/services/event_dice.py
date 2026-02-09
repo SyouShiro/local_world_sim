@@ -3,10 +3,25 @@ from __future__ import annotations
 import random
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Sequence
+from math import log10
+from typing import Literal, Sequence
 
 from app.core.config import Settings
 from app.db.models import TimelineMessage
+
+
+Category = Literal["positive", "negative", "neutral"]
+Severity = Literal["low", "medium", "high"]
+
+
+@dataclass(frozen=True)
+class EventDiceSlot:
+    """One rolled slot that the LLM must fill with an event."""
+
+    category: Category
+    severity: Severity
+    topic: str
+    rebellious: bool
 
 
 @dataclass(frozen=True)
@@ -18,6 +33,8 @@ class EventDicePlan:
     positive_min_count: int
     negative_min_count: int
     neutral_min_count: int
+    crisis_focus: str
+    event_slots: tuple[EventDiceSlot, ...]
     season_hint: str
     geopolitical_hint: str
     scale_hint: str
@@ -36,6 +53,7 @@ class EventDiceService:
         self._enabled = settings.event_dice_enabled
         self._good_prob = _clamp_probability(settings.event_good_event_prob)
         self._bad_prob = _clamp_probability(settings.event_bad_event_prob)
+        self._rebel_prob = _clamp_probability(settings.event_rebel_prob)
         minimum = max(1, settings.event_min_events)
         maximum = max(minimum, settings.event_max_events)
         self._min_events = minimum
@@ -50,6 +68,7 @@ class EventDiceService:
         timeline_step_value: int,
         timeline_step_unit: str,
         next_seq: int,
+        output_language: str = "en",
     ) -> EventDicePlan:
         """Plan stochastic event distribution for one tick."""
 
@@ -60,6 +79,8 @@ class EventDiceService:
                 positive_min_count=0,
                 negative_min_count=0,
                 neutral_min_count=1,
+                crisis_focus="",
+                event_slots=(),
                 season_hint="No season hint.",
                 geopolitical_hint="No geopolitical pressure hint.",
                 scale_hint="No scale hint.",
@@ -94,6 +115,45 @@ class EventDiceService:
         season_hint = _season_hint(simulated_time, self._default_hemisphere)
         geopolitical_hint = _infer_geopolitical_hint(timeline)
         scale_hint = _build_scale_hint(timeline_step_value, timeline_step_unit)
+        crisis_focus = _choose_crisis_focus(
+            timeline=timeline,
+            season_hint=season_hint,
+            geopolitical_hint=geopolitical_hint,
+            output_language=output_language,
+        )
+
+        categories = _roll_categories(
+            target_event_count=target_event_count,
+            positive_min_count=positive_min,
+            negative_min_count=negative_min,
+            neutral_min_count=neutral_min,
+            good_prob=self._good_prob,
+            bad_prob=self._bad_prob,
+            geopolitical_hint=geopolitical_hint,
+        )
+
+        event_slots: list[EventDiceSlot] = []
+        for category in categories:
+            rebellious = bool(
+                category in ("positive", "negative") and random.random() < self._rebel_prob
+            )
+            topic = crisis_focus
+            if rebellious:
+                topic = _choose_rebel_topic(crisis_focus=crisis_focus, output_language=output_language)
+
+            severity = _roll_severity(
+                category=category,
+                timeline_step_value=timeline_step_value,
+                timeline_step_unit=timeline_step_unit,
+            )
+            event_slots.append(
+                EventDiceSlot(
+                    category=category,
+                    severity=severity,
+                    topic=topic,
+                    rebellious=rebellious,
+                )
+            )
 
         return EventDicePlan(
             enabled=True,
@@ -101,6 +161,8 @@ class EventDiceService:
             positive_min_count=positive_min,
             negative_min_count=negative_min,
             neutral_min_count=neutral_min,
+            crisis_focus=crisis_focus,
+            event_slots=tuple(event_slots),
             season_hint=season_hint,
             geopolitical_hint=geopolitical_hint,
             scale_hint=scale_hint,
@@ -237,6 +299,188 @@ def _infer_geopolitical_hint(timeline: Sequence[TimelineMessage]) -> str:
     if cooperation_score >= tension_score + 2:
         return "International conditions lean toward temporary coordination and diplomacy."
     return "International conditions are mixed, with both friction and cooperation."
+
+
+def _normalize_language(code: str) -> str:
+    normalized = (code or "").strip().lower().replace("_", "-")
+    if normalized in {"zh", "zh-cn", "zh-hans"}:
+        return "zh-cn"
+    return "en"
+
+
+def _topic_catalog(language: str) -> tuple[str, ...]:
+    lang = _normalize_language(language)
+    if lang == "zh-cn":
+        return (
+            "战争",
+            "饥荒",
+            "瘟疫",
+            "金融危机",
+            "干旱",
+            "自然灾害",
+            "人为灾害",
+            "事故",
+            "政治动荡",
+            "技术突破",
+        )
+    return (
+        "war",
+        "famine",
+        "epidemic",
+        "financial crisis",
+        "drought",
+        "natural disaster",
+        "man-made disaster",
+        "major accident",
+        "political turmoil",
+        "technology breakthrough",
+    )
+
+
+def _choose_crisis_focus(
+    *,
+    timeline: Sequence[TimelineMessage],
+    season_hint: str,
+    geopolitical_hint: str,
+    output_language: str,
+) -> str:
+    language = _normalize_language(output_language)
+    topics = _topic_catalog(language)
+    if not topics:
+        return ""
+
+    text = " ".join(item.content for item in timeline[-10:]).lower()
+    season = season_hint.lower()
+    geop = geopolitical_hint.lower()
+
+    def hit(*keywords: str) -> bool:
+        return any(word in text for word in keywords)
+
+    if language == "zh-cn":
+        if hit("战争", "战事", "入侵", "冲突", "制裁") or "tense" in geop:
+            return "战争"
+        if hit("饥荒", "歉收", "粮", "断粮") or "drought" in season:
+            return "饥荒"
+        if hit("瘟疫", "疫病", "感染", "隔离"):
+            return "瘟疫"
+        if hit("金融", "通胀", "崩盘", "挤兑"):
+            return "金融危机"
+        if hit("地震", "洪水", "台风", "暴雨", "火山", "雪灾"):
+            return "自然灾害"
+        if hit("爆炸", "污染", "泄漏", "事故"):
+            return "事故"
+        if hit("政变", "叛乱", "示威", "动荡"):
+            return "政治动荡"
+        return random.choice(topics)
+
+    if hit("war", "invasion", "conflict", "sanction", "riot") or "tense" in geop:
+        return "war"
+    if hit("famine", "hunger", "crop failure") or "drought" in season:
+        return "famine"
+    if hit("epidemic", "plague", "infection", "quarantine"):
+        return "epidemic"
+    if hit("inflation", "bank run", "default", "crash"):
+        return "financial crisis"
+    if hit("earthquake", "flood", "hurricane", "wildfire", "eruption"):
+        return "natural disaster"
+    if hit("explosion", "leak", "accident", "collapse"):
+        return "major accident"
+    if hit("coup", "uprising", "protest", "turmoil"):
+        return "political turmoil"
+    return random.choice(topics)
+
+
+def _choose_rebel_topic(*, crisis_focus: str, output_language: str) -> str:
+    topics = _topic_catalog(output_language)
+    if not topics:
+        return ""
+    candidates = [item for item in topics if item != crisis_focus]
+    if not candidates:
+        return crisis_focus
+    return random.choice(candidates)
+
+
+def _roll_categories(
+    *,
+    target_event_count: int,
+    positive_min_count: int,
+    negative_min_count: int,
+    neutral_min_count: int,
+    good_prob: float,
+    bad_prob: float,
+    geopolitical_hint: str,
+) -> list[Category]:
+    categories: list[Category] = []
+    categories.extend(["positive"] * max(0, positive_min_count))
+    categories.extend(["negative"] * max(0, negative_min_count))
+    categories.extend(["neutral"] * max(0, neutral_min_count))
+
+    remaining = max(0, target_event_count - len(categories))
+    if remaining <= 0:
+        random.shuffle(categories)
+        return categories[:target_event_count]
+
+    geop = (geopolitical_hint or "").lower()
+    tension_boost = 0.10 if "tense" in geop or "confrontation" in geop else 0.0
+    w_pos = max(0.05, good_prob)
+    w_neg = max(0.05, bad_prob + tension_boost)
+    w_neu = max(0.10, 1.0 - (w_pos + w_neg) / 2.0)
+    weights = [w_pos, w_neg, w_neu]
+    total = sum(weights)
+    if total <= 0:
+        weights = [0.2, 0.2, 0.6]
+        total = sum(weights)
+    weights = [w / total for w in weights]
+
+    for _ in range(remaining):
+        pick = random.random()
+        if pick < weights[0]:
+            categories.append("positive")
+        elif pick < weights[0] + weights[1]:
+            categories.append("negative")
+        else:
+            categories.append("neutral")
+
+    random.shuffle(categories)
+    return categories[:target_event_count]
+
+
+def _roll_severity(*, category: Category, timeline_step_value: int, timeline_step_unit: str) -> Severity:
+    """Roll severity using a normal distribution and bucket into low/medium/high.
+
+    We intentionally bias toward medium, and shift the mean based on the time interval scale.
+    """
+
+    unit = (timeline_step_unit or "month").strip().lower()
+    value = max(1, int(timeline_step_value))
+    mu = -0.15
+    if unit == "day":
+        mu = -0.60
+    elif unit == "week":
+        mu = -0.35
+    elif unit == "month":
+        mu = -0.10
+    elif unit == "year":
+        mu = 0.25
+
+    mu += min(0.35, 0.15 * log10(value + 1))
+
+    if category == "negative":
+        mu += 0.10
+    elif category == "positive":
+        mu += 0.05
+    else:
+        mu -= 0.10
+
+    sigma = 0.85
+    z = random.gauss(mu, sigma)
+
+    # Bucket thresholds tuned so "medium" is the most common outcome.
+    if z < -0.25:
+        return "low"
+    if z < 0.70:
+        return "medium"
+    return "high"
 
 
 def _build_scale_hint(step_value: int, step_unit: str) -> str:

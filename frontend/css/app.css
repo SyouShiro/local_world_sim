@@ -331,6 +331,55 @@ button:disabled {
   margin: 8px 0;
 }
 
+.panel-section {
+  margin: 0;
+  padding: 6px 0;
+  border-top: 1px solid var(--border);
+}
+
+.panel-section:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+
+.panel-section-summary {
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+  user-select: none;
+}
+
+.panel-section-summary::-webkit-details-marker {
+  display: none;
+}
+
+.panel-section-summary h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.panel-section-summary::after {
+  content: "▾";
+  color: var(--muted);
+  font-size: 0.9rem;
+  transform: rotate(0deg);
+  transition: transform 160ms ease;
+}
+
+.panel-section:not([open]) .panel-section-summary::after {
+  transform: rotate(-90deg);
+}
+
+.panel-section-body {
+  display: grid;
+  gap: 10px;
+  padding-bottom: 6px;
+}
+
 .hint {
   margin: 0;
   font-size: 0.78rem;

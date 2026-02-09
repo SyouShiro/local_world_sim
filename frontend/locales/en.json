@@ -82,6 +82,7 @@
   "settings.desc.EVENT_DICE_ENABLED": "Enable or disable event dice system.",
   "settings.desc.EVENT_GOOD_EVENT_PROB": "Base probability of positive events (0-1).",
   "settings.desc.EVENT_BAD_EVENT_PROB": "Base probability of severe events (0-1).",
+  "settings.desc.EVENT_REBEL_PROB": "Rebel probability (0-1): insert a non-focus topic inside positive/negative slots.",
   "settings.desc.EVENT_MIN_EVENTS": "Minimum events generated per tick.",
   "settings.desc.EVENT_MAX_EVENTS": "Maximum events generated per tick.",
   "settings.desc.EVENT_DEFAULT_HEMISPHERE": "Default season hemisphere (north/south).",

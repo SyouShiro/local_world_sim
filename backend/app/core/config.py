@@ -41,6 +41,7 @@ class Settings(BaseSettings):
     event_dice_enabled: bool = Field(default=True, alias="EVENT_DICE_ENABLED")
     event_good_event_prob: float = Field(default=0.25, alias="EVENT_GOOD_EVENT_PROB")
     event_bad_event_prob: float = Field(default=0.15, alias="EVENT_BAD_EVENT_PROB")
+    event_rebel_prob: float = Field(default=0.10, alias="EVENT_REBEL_PROB")
     event_min_events: int = Field(default=1, alias="EVENT_MIN_EVENTS")
     event_max_events: int = Field(default=5, alias="EVENT_MAX_EVENTS")
     event_default_hemisphere: str = Field(default="north", alias="EVENT_DEFAULT_HEMISPHERE")
