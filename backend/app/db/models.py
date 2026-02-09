@@ -46,7 +46,7 @@ class SessionPreference(Base):
     session_id: Mapped[str] = mapped_column(
         String, ForeignKey("world_sessions.id"), primary_key=True
     )
-    output_language: Mapped[str] = mapped_column(String, nullable=False, default="en")
+    output_language: Mapped[str] = mapped_column(String, nullable=False, default="zh-cn")
     timeline_start_iso: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     timeline_step_value: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     timeline_step_unit: Mapped[str] = mapped_column(String, nullable=False, default="month")

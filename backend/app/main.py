@@ -13,6 +13,7 @@ from app.api import websocket as websocket_api
 from app.core.config import get_settings
 from app.core.logging import setup_logging
 from app.db.base import create_engine, create_sessionmaker, init_db
+from app.services.event_dice import EventDiceService
 from app.services.memory_service import create_memory_service
 from app.services.prompt_builder import PromptBuilder
 from app.services.branch_service import BranchService
@@ -43,6 +44,7 @@ def create_app() -> FastAPI:
     app.state.ws_manager = websocket_api.WebSocketManager()
     app.state.provider_service = ProviderService(sessionmaker, app.state.ws_manager, settings)
     app.state.memory_service = create_memory_service(sessionmaker=sessionmaker, settings=settings)
+    app.state.event_dice_service = EventDiceService(settings)
     app.state.branch_service = BranchService(
         sessionmaker, app.state.ws_manager, app.state.memory_service
     )
@@ -54,6 +56,7 @@ def create_app() -> FastAPI:
         ),
         app.state.provider_service,
         app.state.memory_service,
+        app.state.event_dice_service,
     )
     app.state.runner_manager = RunnerManager(
         sessionmaker, app.state.simulation_service, app.state.ws_manager

@@ -4,6 +4,7 @@ from typing import Iterable, List
 
 from app.db.models import TimelineMessage, UserIntervention
 from app.memory.types import MemorySnippet
+from app.services.event_dice import EventDicePlan
 
 
 class PromptBuilder:
@@ -31,6 +32,7 @@ class PromptBuilder:
         timeline_start_iso: str | None = None,
         timeline_step_value: int = 1,
         timeline_step_unit: str = "month",
+        event_dice_plan: EventDicePlan | None = None,
     ) -> List[dict]:
         """Create the message list for an LLM provider."""
 
@@ -39,7 +41,11 @@ class PromptBuilder:
             "You are generating a world progress report. "
             "Keep it concise, structured, and continuous. "
             "Output JSON with title, time_advance, summary, events, and risks. "
-            f"Keep JSON keys in English. Write all human-readable values in {language_hint}."
+            "Keep JSON keys in English. "
+            "Use this JSON schema for events: "
+            "events: [{\"category\":\"positive|negative|neutral\","
+            "\"severity\":\"low|medium|high\",\"description\":\"...\"}]. "
+            f"Keep human-readable values in {language_hint}."
         )
         history_lines = []
         for message in list(timeline)[-self._max_history :]:
@@ -49,6 +55,7 @@ class PromptBuilder:
         intervention_text = "\n".join(intervention_lines) if intervention_lines else "(none)"
 
         memory_section = self._build_memory_section(memory_snippets)
+        dice_guidance = self._build_dice_guidance(event_dice_plan)
         if memory_section:
             user_prompt = (
                 "World preset:\n"
@@ -58,12 +65,15 @@ class PromptBuilder:
                 "Timeline clock:\n"
                 f"Start at: {timeline_start_iso or '(auto)'}\n"
                 f"Step: {timeline_step_value} {timeline_step_unit}\n\n"
+                "Event dice guidance:\n"
+                f"{dice_guidance}\n\n"
                 "Long-term memory context:\n"
                 f"{memory_section}\n\n"
                 "Pending interventions:\n"
                 f"{intervention_text}\n\n"
                 f"Time advance label: {tick_label}\n"
-                "Return JSON only."
+                "Return JSON only. "
+                "The events array must contain between 1 and 5 items and follow dice guidance."
             )
         else:
             user_prompt = (
@@ -74,10 +84,13 @@ class PromptBuilder:
                 "Timeline clock:\n"
                 f"Start at: {timeline_start_iso or '(auto)'}\n"
                 f"Step: {timeline_step_value} {timeline_step_unit}\n\n"
+                "Event dice guidance:\n"
+                f"{dice_guidance}\n\n"
                 "Pending interventions:\n"
                 f"{intervention_text}\n\n"
                 f"Time advance label: {tick_label}\n"
-                "Return JSON only."
+                "Return JSON only. "
+                "The events array must contain between 1 and 5 items and follow dice guidance."
             )
 
         return [
@@ -124,6 +137,25 @@ class PromptBuilder:
         if not compact:
             return 0
         return max(1, len(compact) // 4)
+
+    @staticmethod
+    def _build_dice_guidance(plan: EventDicePlan | None) -> str:
+        if not plan or not plan.enabled:
+            return (
+                "No dice override. Produce logically varied events with balanced tones. "
+                "Keep event count between 1 and 5."
+            )
+        return (
+            f"Target event count: {plan.target_event_count} (1-5).\n"
+            f"Minimum positive events: {plan.positive_min_count}.\n"
+            f"Minimum negative events: {plan.negative_min_count}.\n"
+            f"Minimum neutral events: {plan.neutral_min_count}.\n"
+            f"Season hint: {plan.season_hint}\n"
+            f"Geopolitical hint: {plan.geopolitical_hint}\n"
+            f"Scale hint: {plan.scale_hint}\n"
+            f"Interval hint: {plan.interval_hint}\n"
+            "Avoid over-specific deterministic causes; keep surprises plausible and coherent."
+        )
 
     @staticmethod
     def _language_name(code: str) -> str:

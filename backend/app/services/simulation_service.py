@@ -6,6 +6,7 @@ from app.db.models import TimelineMessage, UserIntervention
 from app.repos.message_repo import MessageRepo
 from app.repos.session_pref_repo import SessionPreferenceRepo
 from app.repos.session_repo import SessionRepo
+from app.services.event_dice import EventDiceService
 from app.services.memory_service import MemoryService
 from app.services.provider_service import ProviderService
 from app.services.prompt_builder import PromptBuilder
@@ -20,11 +21,13 @@ class SimulationService:
         prompt_builder: PromptBuilder,
         provider_service: ProviderService,
         memory_service: MemoryService,
+        event_dice_service: EventDiceService,
     ) -> None:
         self._sessionmaker = sessionmaker
         self._prompt_builder = prompt_builder
         self._provider_service = provider_service
         self._memory_service = memory_service
+        self._event_dice_service = event_dice_service
 
     async def generate_next(self, session_id: str) -> TimelineMessage:
         """Generate the next timeline report for the active branch."""
@@ -56,6 +59,14 @@ class SimulationService:
                 "timeline_step_unit": preference.timeline_step_unit if preference else "month",
                 "intervention_ids": [item.id for item in interventions],
             }
+            next_seq = (timeline[-1].seq + 1) if timeline else 1
+            event_dice_plan = self._event_dice_service.build_plan(
+                timeline=timeline,
+                timeline_start_iso=snapshot["timeline_start_iso"],
+                timeline_step_value=snapshot["timeline_step_value"],
+                timeline_step_unit=snapshot["timeline_step_unit"],
+                next_seq=next_seq,
+            )
 
         memory_query = self._build_memory_query(
             world_preset=snapshot["world_preset"],
@@ -81,6 +92,7 @@ class SimulationService:
             timeline_start_iso=snapshot["timeline_start_iso"],
             timeline_step_value=snapshot["timeline_step_value"],
             timeline_step_unit=snapshot["timeline_step_unit"],
+            event_dice_plan=event_dice_plan,
         )
         adapter, runtime_cfg = await self._provider_service.get_generation_config(session_id)
         result = await adapter.generate(runtime_cfg, prompt_messages, stream=False)

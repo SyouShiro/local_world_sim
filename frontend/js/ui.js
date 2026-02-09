@@ -82,10 +82,15 @@ function buildTimelineCard(message, timelineConfig = null) {
     item.appendChild(createTextSection(t("timeline.card.summary"), parsed.summary));
   }
   if (parsed.events.length > 0) {
-    item.appendChild(createEventSection(t("timeline.card.events"), parsed.events));
+    item.appendChild(createEventSection(t("timeline.card.events"), parsed.events, timelineConfig));
   }
   if (parsed.risks.length > 0) {
-    item.appendChild(createListSection(t("timeline.card.risks"), parsed.risks.map((row) => row.description || row.label)));
+    item.appendChild(
+      createListSection(
+        t("timeline.card.risks"),
+        parsed.risks.map((row) => row.description || row.label)
+      )
+    );
   }
 
   if (!parsed.summary && parsed.events.length === 0 && parsed.risks.length === 0) {
@@ -141,17 +146,23 @@ function normalizeEventList(value) {
       const description = item.trim();
       if (!description) return;
       rows.push({
-        label: buildTagLabel(description, index + 1),
+        category: "neutral",
+        label: eventCategoryLabel("neutral"),
+        severity: "medium",
         description,
       });
       return;
     }
     if (item && typeof item === "object") {
+      const category = normalizeEventCategory(item.category);
+      const severity = normalizeEventSeverity(item.severity);
       const label = toSafeText(item.title || item.label || "");
       const description = toSafeText(item.description || item.detail || item.content || "");
       if (!label && !description) return;
       rows.push({
-        label: label || buildTagLabel(description, index + 1),
+        category,
+        label: label || eventCategoryLabel(category),
+        severity,
         description: description || label,
       });
     }
@@ -188,15 +199,32 @@ function createListSection(title, rows) {
   return section;
 }
 
-function createEventSection(title, rows) {
+function createEventSection(title, rows, timelineConfig) {
   const section = createSectionShell(title);
   const wrap = document.createElement("div");
   wrap.className = "timeline-events";
   rows.forEach((row) => {
+    const severity = inferEventSeverity(row, timelineConfig);
     const details = document.createElement("details");
-    details.className = "timeline-event";
+    details.className = `timeline-event severity-${severity.level}`;
+    details.open = true;
+
+    const bar = document.createElement("span");
+    bar.className = `timeline-event-bar severity-${severity.level}`;
+    details.appendChild(bar);
+
     const summary = document.createElement("summary");
-    summary.textContent = row.label;
+    const summaryWrap = document.createElement("div");
+    summaryWrap.className = "timeline-event-summary";
+    const summaryTitle = document.createElement("span");
+    summaryTitle.className = "timeline-event-title";
+    summaryTitle.textContent = eventCategoryLabel(row.category);
+    const summarySeverity = document.createElement("span");
+    summarySeverity.className = "timeline-event-severity";
+    summarySeverity.textContent = `${t("timeline.card.severity")}: ${severity.label}`;
+    summaryWrap.appendChild(summaryTitle);
+    summaryWrap.appendChild(summarySeverity);
+    summary.appendChild(summaryWrap);
     details.appendChild(summary);
     const content = document.createElement("p");
     content.textContent = row.description;
@@ -221,6 +249,71 @@ function buildTagLabel(text, index) {
   const compact = first.replace(/\s+/g, " ");
   if (!compact) return `${t("timeline.card.event_tag")} ${index}`;
   return compact.length > 18 ? `${compact.slice(0, 18)}...` : compact;
+}
+
+function normalizeEventCategory(value) {
+  const raw = String(value || "").trim().toLowerCase();
+  if (raw === "positive" || raw === "good") return "positive";
+  if (raw === "negative" || raw === "bad") return "negative";
+  return "neutral";
+}
+
+function normalizeEventSeverity(value) {
+  const raw = String(value || "").trim().toLowerCase();
+  if (raw === "low" || raw === "minor" || raw === "低") return "low";
+  if (raw === "high" || raw === "critical" || raw === "severe" || raw === "高") return "high";
+  if (raw === "medium" || raw === "moderate" || raw === "中") return "medium";
+  return "";
+}
+
+function eventCategoryLabel(category) {
+  if (category === "positive") {
+    return t("timeline.card.event_positive");
+  }
+  if (category === "negative") {
+    return t("timeline.card.event_negative");
+  }
+  return t("timeline.card.event_neutral");
+}
+
+function inferEventSeverity(row, timelineConfig) {
+  const explicit = normalizeEventSeverity(row.severity);
+  if (explicit) {
+    return {
+      level: explicit,
+      label: severityLabel(explicit),
+    };
+  }
+
+  const intervalDays = estimateIntervalDays(timelineConfig);
+  let score = 1;
+  if (intervalDays >= 30) score += 1;
+  if (intervalDays >= 365) score += 1;
+  if (row.category === "negative") score += 1;
+  if (row.category === "positive" && intervalDays <= 7) score -= 1;
+  score = Math.max(1, Math.min(3, score));
+
+  const level = score <= 1 ? "low" : score === 2 ? "medium" : "high";
+  return {
+    level,
+    label: severityLabel(level),
+  };
+}
+
+function severityLabel(level) {
+  if (level === "high") return t("timeline.card.severity_high");
+  if (level === "low") return t("timeline.card.severity_low");
+  return t("timeline.card.severity_medium");
+}
+
+function estimateIntervalDays(timelineConfig) {
+  if (!timelineConfig) return 30;
+  const stepValue = Math.max(1, Number(timelineConfig.stepValue || 1));
+  const unit = String(timelineConfig.stepUnit || "month").toLowerCase();
+  if (unit === "day") return stepValue;
+  if (unit === "week") return stepValue * 7;
+  if (unit === "year") return stepValue * 365;
+  return stepValue * 30;
 }
 
 function sanitizeReportText(content) {

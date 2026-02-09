@@ -128,10 +128,12 @@ function renderBranchTabs() {
   });
 }
 
-function applyProviderDefaults(provider) {
+function applyProviderDefaults(provider, forceValue = true) {
   const defaultUrl = providerDefaults[provider] || "";
   elements.baseUrl.placeholder = defaultUrl || t("provider.base_url_placeholder");
-  elements.baseUrl.value = defaultUrl;
+  if (forceValue) {
+    elements.baseUrl.value = defaultUrl;
+  }
 }
 
 function renderIntervalUnitOptions() {
@@ -219,6 +221,12 @@ function fillLanguageOptions() {
     elements.languageSelect.appendChild(option);
   });
   elements.languageSelect.value = getCurrentLocale();
+}
+
+function applyLocalePresentation() {
+  const locale = getCurrentLocale();
+  document.documentElement.lang = locale;
+  document.body.classList.toggle("locale-zh", locale.toLowerCase().startsWith("zh"));
 }
 
 function normalizeError(error) {
@@ -564,12 +572,13 @@ async function handleLanguageChange() {
   const nextLocale = elements.languageSelect.value;
   await setLocale(nextLocale);
   setStore({ locale: getCurrentLocale() });
+  applyLocalePresentation();
   renderIntervalUnitOptions();
   syncTickLabel();
   setSessionId(store.session?.session_id || null);
   syncRunnerState(store.runnerState);
   syncConnectionState(store.connectionState);
-  applyProviderDefaults(elements.providerSelect.value);
+  applyProviderDefaults(elements.providerSelect.value, false);
   renderModelOptions(store.provider.models || []);
   renderBranchTabs();
   const activeTimeline = store.timelineByBranch[store.activeBranchId] || [];
@@ -650,6 +659,7 @@ async function bootstrap() {
   await initI18n();
   applyTranslations();
   fillLanguageOptions();
+  applyLocalePresentation();
   renderIntervalUnitOptions();
   setStore({ locale: getCurrentLocale() });
 
