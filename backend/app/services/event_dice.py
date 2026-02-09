@@ -121,7 +121,7 @@ def _compute_simulated_time(
 ) -> datetime:
     baseline = _parse_iso_or_now(timeline_start_iso)
     offset = max(0, next_seq - 1) * max(1, timeline_step_value)
-    simulated = datetime.fromtimestamp(baseline.timestamp(), tz=timezone.utc)
+    simulated = baseline
     unit = (timeline_step_unit or "month").strip().lower()
 
     if unit == "day":
@@ -155,15 +155,24 @@ def _delta_days(days: int):
 
 def _add_months(source: datetime, months: int) -> datetime:
     year = source.year + (source.month - 1 + months) // 12
+    year = _clamp_year(year)
     month = (source.month - 1 + months) % 12 + 1
     day = min(source.day, _days_in_month(year, month))
     return source.replace(year=year, month=month, day=day)
 
 
 def _add_years(source: datetime, years: int) -> datetime:
-    year = source.year + years
+    year = _clamp_year(source.year + years)
     day = min(source.day, _days_in_month(year, source.month))
     return source.replace(year=year, day=day)
+
+
+def _clamp_year(year: int) -> int:
+    if year < 1:
+        return 1
+    if year > 9999:
+        return 9999
+    return year
 
 
 def _days_in_month(year: int, month: int) -> int:

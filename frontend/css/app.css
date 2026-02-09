@@ -445,21 +445,33 @@ button:disabled {
   border: 1px solid var(--border);
   border-radius: 10px;
   background: rgba(10, 18, 34, 0.8);
-  padding: 8px 10px;
+  padding: 10px 12px;
 }
 
-.timeline-metric h4 {
+.timeline-metric-title {
   margin: 0;
-  font-size: 0.74rem;
+  font-size: calc(0.74rem + 8px);
   color: var(--muted);
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 
-.timeline-metric p {
-  margin: 6px 0 0;
-  font-size: 0.84rem;
+.timeline-metric-value {
+  margin: 8px 0 0;
+  font-size: calc(0.84rem + 12px);
+  line-height: 1.15;
   color: var(--ink);
+}
+
+.timeline-metric-value-tension {
+  font-weight: 600;
+}
+
+.timeline-metric-value-focus {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .timeline-card-section h4 {
@@ -554,7 +566,7 @@ button.small {
 
 .timeline-events {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: 8px;
 }
 
@@ -563,25 +575,14 @@ button.small {
   border: 1px solid var(--border);
   background: rgba(15, 24, 40, 0.9);
   padding: 0;
-  min-width: min(100%, 240px);
-  flex: 1 1 240px;
+  width: 100%;
+  min-width: 0;
   overflow: hidden;
 }
 
-.timeline-event summary {
-  cursor: pointer;
-  list-style: none;
-  color: var(--ink);
-}
-
-.timeline-event summary::-webkit-details-marker {
-  display: none;
-}
-
-.timeline-event p {
-  margin: 0;
-  padding: 0 10px 10px;
-  font-size: 0.8rem;
+.timeline-event-card {
+  display: flex;
+  flex-direction: column;
 }
 
 .timeline-event-bar {
@@ -591,22 +592,21 @@ button.small {
 }
 
 .timeline-event-summary {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 10px 4px;
+  padding: 8px 10px 0;
 }
 
 .timeline-event-title {
-  font-size: 0.78rem;
+  font-size: 0.8rem;
   letter-spacing: 0.04em;
 }
 
-.timeline-event-severity {
-  font-size: 0.72rem;
+.timeline-event-content {
+  margin: 0;
+  padding: 6px 10px 10px;
+  font-size: 0.8rem;
   color: var(--muted);
-  white-space: nowrap;
+  line-height: 1.45;
+  white-space: pre-wrap;
 }
 
 .timeline-event.category-positive.severity-low {

@@ -33,13 +33,13 @@ export function renderTimeline(messages, timelineConfig = null) {
   [...messages].reverse().forEach((message) => {
     timelineListEl.appendChild(buildTimelineCard(message, timelineConfig));
   });
-  renderKeyEvents(messages);
+  renderKeyEvents(messages, timelineConfig);
 }
 
 export function appendTimelineMessage(message, timelineConfig = null, messagesForSidebar = null) {
   timelineListEl.prepend(buildTimelineCard(message, timelineConfig));
   if (Array.isArray(messagesForSidebar)) {
-    renderKeyEvents(messagesForSidebar);
+    renderKeyEvents(messagesForSidebar, timelineConfig);
   }
 }
 
@@ -127,16 +127,8 @@ function buildTimelineCard(message, timelineConfig = null) {
   if (parsed.events.length > 0) {
     item.appendChild(createEventSection(t("timeline.card.events"), parsed.events, timelineConfig));
   }
-  if (parsed.risks.length > 0) {
-    item.appendChild(
-      createListSection(
-        t("timeline.card.risks"),
-        parsed.risks.map((row) => toHeadlineSentence(row.description)).filter(Boolean)
-      )
-    );
-  }
 
-  if (!summary && parsed.events.length === 0 && parsed.risks.length === 0) {
+  if (!summary && parsed.events.length === 0) {
     item.appendChild(createTextSection(t("timeline.card.raw"), toNewsBrief(message.content)));
   }
 
@@ -210,18 +202,12 @@ function createSystemReportEditor(message, parsed, panel, toggleButton) {
     formatEditableEntries(parsed.events),
     4
   );
-  const risksInput = createLabeledTextarea(
-    t("timeline.card.edit_risks"),
-    formatEditableEntries(parsed.risks),
-    3
-  );
 
   form.appendChild(titleInput.wrap);
   form.appendChild(summaryInput.wrap);
   form.appendChild(tensionInput.wrap);
   form.appendChild(crisisInput.wrap);
   form.appendChild(eventsInput.wrap);
-  form.appendChild(risksInput.wrap);
 
   const actions = document.createElement("div");
   actions.className = "timeline-card-edit-actions";
@@ -255,7 +241,7 @@ function createSystemReportEditor(message, parsed, panel, toggleButton) {
         tension_percent: clampPercent(tensionInput.input.value),
         crisis_focus: crisisInput.input.value.trim(),
         events: parseEditableEntries(eventsInput.input.value, "neutral", "medium"),
-        risks: parseEditableEntries(risksInput.input.value, "negative", "high"),
+        risks: parsed.risks,
       },
     };
     save.disabled = true;
@@ -391,10 +377,10 @@ function parseEditableEntries(rawValue, defaultCategory, defaultSeverity) {
   return rows;
 }
 
-function renderKeyEvents(messages) {
+function renderKeyEvents(messages, timelineConfig = null) {
   if (!keyEventsListEl) return;
   keyEventsListEl.innerHTML = "";
-  const rows = collectKeyEvents(messages);
+  const rows = collectKeyEvents(messages, timelineConfig);
   if (rows.length === 0) {
     const empty = document.createElement("div");
     empty.className = "key-event-empty";
@@ -416,7 +402,7 @@ function renderKeyEvents(messages) {
   });
 }
 
-function collectKeyEvents(messages) {
+function collectKeyEvents(messages, timelineConfig) {
   if (!Array.isArray(messages) || messages.length === 0) {
     return [];
   }
@@ -427,12 +413,27 @@ function collectKeyEvents(messages) {
     if (message.role !== "system_report") continue;
     const parsed = resolveReportSnapshot(message);
     if (!parsed) continue;
-    const category = dominantEventCategory(parsed.events || []);
-    const label = eventCategoryLabel(category);
-    const summary = toHeadlineSentence(
-      parsed.summary || parsed.events?.[0]?.description || parsed.risks?.[0]?.description
-    );
+
+    const events = Array.isArray(parsed.events) ? parsed.events : [];
+    const highImpact = events
+      .map((event) => {
+        const category = normalizeEventCategory(event.category);
+        const severity = inferEventSeverity(event, timelineConfig);
+        return { event, category, severity };
+      })
+      .filter((row) => row.category !== "neutral" && row.severity.level === "high");
+    if (highImpact.length === 0) continue;
+
+    const picked =
+      highImpact.find((row) => row.category === "negative") ||
+      highImpact.find((row) => row.category === "positive") ||
+      null;
+    if (!picked) continue;
+
+    const label = eventCategoryLabel(picked.category);
+    const summary = toHeadlineSentence(picked.event.description);
     if (!summary) continue;
+
     rows.push({
       time: formatMessageTime(message.created_at) || `#${message.seq}`,
       category: label,
@@ -555,7 +556,7 @@ function deriveSituationMetrics(parsed, timelineConfig) {
   if (typeof explicitTension === "number") {
     return {
       tensionPercent: clampPercent(explicitTension),
-      crisisFocus: deriveCrisisFocus(parsed),
+      crisisFocus: deriveCrisisFocus(parsed, timelineConfig),
     };
   }
 
@@ -575,7 +576,7 @@ function deriveSituationMetrics(parsed, timelineConfig) {
 
   return {
     tensionPercent: clampPercent(score),
-    crisisFocus: deriveCrisisFocus(parsed),
+    crisisFocus: deriveCrisisFocus(parsed, timelineConfig),
   };
 }
 
@@ -585,29 +586,29 @@ function clampPercent(value) {
   return Math.max(0, Math.min(100, Math.round(numeric)));
 }
 
-function deriveCrisisFocus(parsed) {
-  const explicit = toHeadlineSentence(parsed.crisis_focus);
+function deriveCrisisFocus(parsed, timelineConfig) {
+  const explicit = toEventName(parsed.crisis_focus);
   if (explicit) return explicit;
 
-  const highNegative = parsed.events.find(
-    (item) =>
-      normalizeEventCategory(item.category) === "negative" &&
-      normalizeEventSeverity(item.severity) === "high"
-  );
-  if (highNegative) return toHeadlineSentence(highNegative.description);
+  const highImpactEvent = parsed.events.find((item) => {
+    const category = normalizeEventCategory(item.category);
+    if (category === "neutral") return false;
+    const severity = inferEventSeverity(item, timelineConfig);
+    return severity.level === "high";
+  });
+  if (highImpactEvent) {
+    return toEventName(highImpactEvent.description);
+  }
 
-  const negative = parsed.events.find(
-    (item) => normalizeEventCategory(item.category) === "negative"
+  const nonNeutralEvent = parsed.events.find(
+    (item) => normalizeEventCategory(item.category) !== "neutral"
   );
-  if (negative) return toHeadlineSentence(negative.description);
-
-  const risk = parsed.risks[0];
-  if (risk) return toHeadlineSentence(risk.description);
+  if (nonNeutralEvent) return toEventName(nonNeutralEvent.description);
 
   const firstEvent = parsed.events[0];
-  if (firstEvent) return toHeadlineSentence(firstEvent.description);
+  if (firstEvent) return toEventName(firstEvent.description);
 
-  return toHeadlineSentence(parsed.summary) || t("timeline.card.crisis_focus_none");
+  return toEventName(parsed.summary) || t("timeline.card.crisis_focus_none");
 }
 
 function createMetricsSection(tensionPercent, crisisFocus) {
@@ -617,8 +618,10 @@ function createMetricsSection(tensionPercent, crisisFocus) {
   const tension = document.createElement("article");
   tension.className = "timeline-metric";
   const tensionTitle = document.createElement("h4");
+  tensionTitle.className = "timeline-metric-title";
   tensionTitle.textContent = t("timeline.card.tension");
   const tensionValue = document.createElement("p");
+  tensionValue.className = "timeline-metric-value timeline-metric-value-tension";
   tensionValue.textContent = `${clampPercent(tensionPercent)}%`;
   tension.appendChild(tensionTitle);
   tension.appendChild(tensionValue);
@@ -626,8 +629,10 @@ function createMetricsSection(tensionPercent, crisisFocus) {
   const focus = document.createElement("article");
   focus.className = "timeline-metric";
   const focusTitle = document.createElement("h4");
+  focusTitle.className = "timeline-metric-title";
   focusTitle.textContent = t("timeline.card.crisis_focus");
   const focusValue = document.createElement("p");
+  focusValue.className = "timeline-metric-value timeline-metric-value-focus";
   focusValue.textContent = crisisFocus;
   focus.appendChild(focusTitle);
   focus.appendChild(focusValue);
@@ -674,32 +679,27 @@ function createEventSection(title, rows, timelineConfig) {
     const severity = inferEventSeverity(row, timelineConfig);
     const categoryClass = `category-${normalizeEventCategory(row.category)}`;
     const severityClass = `severity-${severity.level}`;
-    const details = document.createElement("details");
-    details.className = `timeline-event ${categoryClass} ${severityClass}`;
-    details.open = true;
+    const eventCard = document.createElement("article");
+    eventCard.className = `timeline-event timeline-event-card ${categoryClass} ${severityClass}`;
 
     const bar = document.createElement("span");
     bar.className = `timeline-event-bar ${categoryClass} ${severityClass}`;
-    details.appendChild(bar);
+    eventCard.appendChild(bar);
 
-    const summary = document.createElement("summary");
-    const summaryWrap = document.createElement("div");
-    summaryWrap.className = "timeline-event-summary";
-    const summaryTitle = document.createElement("span");
-    summaryTitle.className = "timeline-event-title";
-    summaryTitle.textContent = eventCategoryLabel(row.category);
-    const summarySeverity = document.createElement("span");
-    summarySeverity.className = "timeline-event-severity";
-    summarySeverity.textContent = `${t("timeline.card.severity")}: ${severity.label}`;
-    summaryWrap.appendChild(summaryTitle);
-    summaryWrap.appendChild(summarySeverity);
-    summary.appendChild(summaryWrap);
-    details.appendChild(summary);
+    const head = document.createElement("div");
+    head.className = "timeline-event-summary";
+    const meta = document.createElement("span");
+    meta.className = "timeline-event-title";
+    meta.textContent = `${eventCategoryLabel(row.category)} · ${t("timeline.card.severity")}${severity.label}`;
+    head.appendChild(meta);
+    eventCard.appendChild(head);
 
     const content = document.createElement("p");
+    content.className = "timeline-event-content";
     content.textContent = toNewsBrief(row.description);
-    details.appendChild(content);
-    wrap.appendChild(details);
+    eventCard.appendChild(content);
+
+    wrap.appendChild(eventCard);
   });
   section.appendChild(wrap);
   return section;
@@ -723,6 +723,21 @@ function toHeadlineSentence(text) {
   const first = sentenceMatch && sentenceMatch[0] ? sentenceMatch[0].trim() : "";
   if (!first) return normalized.slice(0, 90);
   return first.length > 120 ? `${first.slice(0, 120)}...` : first;
+}
+
+function toEventName(text) {
+  const normalized = String(text || "").trim().replace(/\s+/g, " ");
+  if (!normalized) return "";
+
+  const segment = normalized.split(/[。！？!?；;:：,，、|]/)[0]?.trim() || "";
+  const base = segment || toHeadlineSentence(normalized);
+  const cleaned = base.replace(/^[-–—\s]+/, "").trim();
+  if (!cleaned) return "";
+
+  const hasCjk = /[\u3400-\u9fff]/.test(cleaned);
+  const maxLength = hasCjk ? 18 : 34;
+  if (cleaned.length <= maxLength) return cleaned;
+  return `${cleaned.slice(0, maxLength)}...`;
 }
 
 function normalizeEventCategory(value) {

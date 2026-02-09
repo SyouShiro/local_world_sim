@@ -231,27 +231,77 @@ function syncTickLabel() {
 
 function nowLocalDateTimeInputValue() {
   const now = new Date();
-  const offsetMs = now.getTimezoneOffset() * 60000;
-  const local = new Date(now.getTime() - offsetMs);
-  return local.toISOString().slice(0, 16);
+  const year = String(now.getFullYear()).padStart(4, "0");
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  const hour = String(now.getHours()).padStart(2, "0");
+  const minute = String(now.getMinutes()).padStart(2, "0");
+  return `${year}-${month}-${day}T${hour}:${minute}`;
 }
 
 function toIsoFromLocalInput(localInput) {
   const value = String(localInput || "").trim();
   if (!value) return null;
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return null;
-  return parsed.toISOString();
+
+  const normalized = value
+    .replace(/\//g, "-")
+    .replace(/年/g, "-")
+    .replace(/月/g, "-")
+    .replace(/日/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/-+$/, "");
+
+  const pattern =
+    /^(\d{1,4})(?:-(\d{1,2})(?:-(\d{1,2})(?:[T ](\d{1,2})(?::(\d{1,2})(?::(\d{1,2}))?)?)?)?)?(?:\s*(Z|[+-]\d{2}:\d{2}))?$/;
+  const match = normalized.match(pattern);
+  if (!match) return null;
+
+  const year = Number(match[1]);
+  const month = match[2] ? Number(match[2]) : 1;
+  const day = match[3] ? Number(match[3]) : 1;
+  const hour = match[4] ? Number(match[4]) : 0;
+  const minute = match[5] ? Number(match[5]) : 0;
+  const second = match[6] ? Number(match[6]) : 0;
+  const timezone = match[7] ? (match[7] === "Z" ? "+00:00" : match[7]) : "+00:00";
+
+  if (year < 1 || year > 9999) return null;
+  if (month < 1 || month > 12) return null;
+  if (day < 1 || day > daysInMonth(year, month)) return null;
+  if (hour < 0 || hour > 23) return null;
+  if (minute < 0 || minute > 59) return null;
+  if (second < 0 || second > 59) return null;
+
+  const yy = String(year).padStart(4, "0");
+  const mm = String(month).padStart(2, "0");
+  const dd = String(day).padStart(2, "0");
+  const hh = String(hour).padStart(2, "0");
+  const mi = String(minute).padStart(2, "0");
+  const ss = String(second).padStart(2, "0");
+  return `${yy}-${mm}-${dd}T${hh}:${mi}:${ss}${timezone}`;
 }
 
 function fromIsoToLocalInput(iso) {
   const value = String(iso || "").trim();
   if (!value) return "";
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return "";
-  const offsetMs = parsed.getTimezoneOffset() * 60000;
-  const local = new Date(parsed.getTime() - offsetMs);
-  return local.toISOString().slice(0, 16);
+  const match = value.match(
+    /^([+-]?\d{4,6})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})?$/
+  );
+  if (!match) {
+    return "";
+  }
+  const yearRaw = match[1].replace(/^\+/, "");
+  if (yearRaw.startsWith("-")) return "";
+  const year =
+    yearRaw.length >= 4 ? yearRaw : String(Number(yearRaw || 0)).padStart(4, "0");
+  return `${year}-${match[2]}-${match[3]}T${match[4]}:${match[5]}`;
+}
+
+function daysInMonth(year, month) {
+  if ([1, 3, 5, 7, 8, 10, 12].includes(month)) return 31;
+  if ([4, 6, 9, 11].includes(month)) return 30;
+  const leapYear = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+  return leapYear ? 29 : 28;
 }
 
 function buildTimelineConfigFromInputs() {
