@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import branch as branch_api
 from app.api import provider as provider_api
+from app.api import runtime_settings as runtime_settings_api
 from app.api import session as session_api
 from app.api import timeline as timeline_api
 from app.api import websocket as websocket_api
@@ -20,6 +21,7 @@ from app.services.branch_service import BranchService
 from app.services.provider_service import ProviderService
 from app.services.runner import RunnerManager
 from app.services.simulation_service import SimulationService
+from app.services.runtime_settings_service import RuntimeSettingsService
 
 
 def create_app() -> FastAPI:
@@ -45,19 +47,22 @@ def create_app() -> FastAPI:
     app.state.provider_service = ProviderService(sessionmaker, app.state.ws_manager, settings)
     app.state.memory_service = create_memory_service(sessionmaker=sessionmaker, settings=settings)
     app.state.event_dice_service = EventDiceService(settings)
+    prompt_builder = PromptBuilder(
+        memory_max_snippets=settings.memory_max_snippets,
+        memory_max_chars=settings.memory_max_chars,
+    )
+    app.state.prompt_builder = prompt_builder
     app.state.branch_service = BranchService(
         sessionmaker, app.state.ws_manager, app.state.memory_service
     )
     app.state.simulation_service = SimulationService(
         sessionmaker,
-        PromptBuilder(
-            memory_max_snippets=settings.memory_max_snippets,
-            memory_max_chars=settings.memory_max_chars,
-        ),
+        prompt_builder,
         app.state.provider_service,
         app.state.memory_service,
         app.state.event_dice_service,
     )
+    app.state.runtime_settings_service = RuntimeSettingsService(app, settings)
     app.state.runner_manager = RunnerManager(
         sessionmaker, app.state.simulation_service, app.state.ws_manager
     )
@@ -72,6 +77,7 @@ def create_app() -> FastAPI:
 
     app.include_router(session_api.router)
     app.include_router(provider_api.router)
+    app.include_router(runtime_settings_api.router)
     app.include_router(branch_api.router)
     app.include_router(timeline_api.timeline_router)
     app.include_router(timeline_api.message_router)

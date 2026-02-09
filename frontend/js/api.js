@@ -25,6 +25,15 @@ export async function createSession(payload) {
   });
 }
 
+export async function getSessionDetail(sessionId) {
+  return request(`/api/session/${sessionId}`);
+}
+
+export async function listSessionHistory(limit = 30) {
+  const query = new URLSearchParams({ limit: String(limit) });
+  return request(`/api/session/history?${query.toString()}`);
+}
+
 export async function startSession(sessionId) {
   return request(`/api/session/${sessionId}/start`, { method: "POST" });
 }
@@ -96,6 +105,21 @@ export async function getModels(sessionId, provider) {
 export async function selectModel(sessionId, payload) {
   return request(`/api/provider/${sessionId}/select-model`, {
     method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function getCurrentProvider(sessionId) {
+  return request(`/api/provider/${sessionId}/current`);
+}
+
+export async function getRuntimeSettings() {
+  return request("/api/debug/settings");
+}
+
+export async function patchRuntimeSettings(payload) {
+  return request("/api/debug/settings", {
+    method: "PATCH",
     body: JSON.stringify(payload),
   });
 }

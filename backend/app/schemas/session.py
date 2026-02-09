@@ -1,5 +1,6 @@
 ﻿from __future__ import annotations
 
+from datetime import datetime
 from typing import Optional
 
 from pydantic import Field
@@ -47,3 +48,36 @@ class SessionStateResponse(APIModel):
     """Response for session running state."""
 
     running: bool
+
+
+class SessionDetailResponse(APIModel):
+    """Full session detail payload for reloading existing local session."""
+
+    session_id: str
+    title: Optional[str] = Field(default=None)
+    world_preset: str
+    tick_label: str
+    post_gen_delay_sec: int
+    running: bool
+    active_branch_id: Optional[str] = Field(default=None)
+    output_language: Optional[str] = Field(default=None)
+    timeline_start_iso: Optional[str] = Field(default=None)
+    timeline_step_value: Optional[int] = Field(default=None)
+    timeline_step_unit: Optional[str] = Field(default=None)
+
+
+class SessionHistoryItem(APIModel):
+    """Summary row for one recent session."""
+
+    session_id: str
+    title: Optional[str] = Field(default=None)
+    active_branch_id: Optional[str] = Field(default=None)
+    running: bool
+    updated_at: datetime
+    created_at: datetime
+
+
+class SessionHistoryResponse(APIModel):
+    """Response payload for recent local session history."""
+
+    sessions: list[SessionHistoryItem]

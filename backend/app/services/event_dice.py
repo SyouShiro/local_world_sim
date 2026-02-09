@@ -28,6 +28,11 @@ class EventDiceService:
     """Create lightweight stochastic guidance for each simulation tick."""
 
     def __init__(self, settings: Settings) -> None:
+        self.reload(settings)
+
+    def reload(self, settings: Settings) -> None:
+        """Reload dice configuration from runtime settings."""
+
         self._enabled = settings.event_dice_enabled
         self._good_prob = _clamp_probability(settings.event_good_event_prob)
         self._bad_prob = _clamp_probability(settings.event_bad_event_prob)

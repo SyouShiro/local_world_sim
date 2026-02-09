@@ -172,6 +172,13 @@ class ProviderService:
             )
             return adapter, runtime_cfg
 
+    async def get_current_config(self, session_id: str) -> Optional[ProviderConfig]:
+        """Return stored provider config for a session."""
+
+        async with self._sessionmaker() as db:
+            repo = ProviderRepo(db)
+            return await repo.get_by_session(session_id)
+
     def _get_adapter(self, provider: str) -> LLMAdapter:
         adapter = self._adapters.get(provider)
         if not adapter:

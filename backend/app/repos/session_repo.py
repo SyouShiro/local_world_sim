@@ -88,3 +88,13 @@ class SessionRepo:
         session.updated_at = utc_now()
         await self._db.flush()
         return session
+
+    async def list_recent_sessions(self, limit: int = 30) -> list[WorldSession]:
+        """List recent sessions ordered by update time descending."""
+
+        result = await self._db.execute(
+            select(WorldSession)
+            .order_by(WorldSession.updated_at.desc(), WorldSession.created_at.desc())
+            .limit(limit)
+        )
+        return list(result.scalars().all())

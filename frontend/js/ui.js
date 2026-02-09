@@ -5,6 +5,7 @@ const runnerStateEl = document.getElementById("runnerState");
 const connectionStateEl = document.getElementById("connectionState");
 const timelineListEl = document.getElementById("timelineList");
 const logListEl = document.getElementById("logList");
+const MAX_LOG_ENTRIES = 10;
 
 export function setSessionId(sessionId) {
   sessionIdEl.textContent = sessionId || t("status.not_created");
@@ -34,6 +35,9 @@ export function addLog(message) {
   entry.className = "log-entry";
   entry.textContent = message;
   logListEl.prepend(entry);
+  while (logListEl.children.length > MAX_LOG_ENTRIES) {
+    logListEl.removeChild(logListEl.lastElementChild);
+  }
 }
 
 function buildTimelineCard(message, timelineConfig = null) {
@@ -205,12 +209,14 @@ function createEventSection(title, rows, timelineConfig) {
   wrap.className = "timeline-events";
   rows.forEach((row) => {
     const severity = inferEventSeverity(row, timelineConfig);
+    const categoryClass = `category-${normalizeEventCategory(row.category)}`;
+    const severityClass = `severity-${severity.level}`;
     const details = document.createElement("details");
-    details.className = `timeline-event severity-${severity.level}`;
+    details.className = `timeline-event ${categoryClass} ${severityClass}`;
     details.open = true;
 
     const bar = document.createElement("span");
-    bar.className = `timeline-event-bar severity-${severity.level}`;
+    bar.className = `timeline-event-bar ${categoryClass} ${severityClass}`;
     details.appendChild(bar);
 
     const summary = document.createElement("summary");
@@ -227,12 +233,22 @@ function createEventSection(title, rows, timelineConfig) {
     summary.appendChild(summaryWrap);
     details.appendChild(summary);
     const content = document.createElement("p");
-    content.textContent = row.description;
+    content.textContent = toNewsBrief(row.description);
     details.appendChild(content);
     wrap.appendChild(details);
   });
   section.appendChild(wrap);
   return section;
+}
+
+function toNewsBrief(text) {
+  const normalized = String(text || "").trim().replace(/\s+/g, " ");
+  if (!normalized) return "";
+  const sentences = normalized
+    .match(/[^。！？!?\.]+[。！？!?\.]?/g)
+    ?.map((part) => part.trim())
+    .filter(Boolean) || [normalized];
+  return sentences.slice(0, 3).join(" ");
 }
 
 function createCodeSection(title, rawText) {

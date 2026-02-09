@@ -37,6 +37,11 @@ class BranchService:
         self._ws_manager = ws_manager
         self._memory_service = memory_service
 
+    def set_memory_service(self, memory_service: MemoryService) -> None:
+        """Swap memory service implementation at runtime."""
+
+        self._memory_service = memory_service
+
     async def list_branches(self, session_id: str) -> tuple[Optional[str], list[Branch]]:
         """Return active branch id and branch list for a session."""
 

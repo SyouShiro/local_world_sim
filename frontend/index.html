@@ -79,6 +79,26 @@
           <button id="createSession" class="primary" data-i18n="setup.create_session">
             Create Session
           </button>
+          <div class="row align-end">
+            <label>
+              <span data-i18n="setup.load_session_id">Session ID</span>
+              <input
+                id="loadSessionId"
+                type="text"
+                data-i18n-placeholder="setup.load_session_id_placeholder"
+              />
+            </label>
+            <button id="loadSession" class="ghost" data-i18n="setup.load_session">
+              Load Session
+            </button>
+          </div>
+          <h2 data-i18n="setup.history_section">History Sessions</h2>
+          <div class="row controls-row">
+            <button id="refreshSessionHistory" class="ghost" data-i18n="setup.refresh_history">
+              Refresh History
+            </button>
+          </div>
+          <div id="sessionHistoryList" class="session-history-list"></div>
 
           <div class="divider"></div>
 
@@ -127,6 +147,29 @@
 
           <div class="divider"></div>
 
+          <h2 data-i18n="settings.section">Settings</h2>
+          <p class="hint" data-i18n="settings.hint">
+            Load and patch runtime settings without restart.
+          </p>
+          <div class="row controls-row">
+            <button id="loadRuntimeSettings" class="ghost" data-i18n="settings.load">
+              Load Settings
+            </button>
+            <button id="applyRuntimeSettings" class="accent" data-i18n="settings.apply">
+              Apply Settings
+            </button>
+          </div>
+          <label>
+            <span data-i18n="settings.editor_label">Runtime settings JSON</span>
+            <textarea
+              id="runtimeSettingsEditor"
+              rows="8"
+              data-i18n-placeholder="settings.editor_placeholder"
+            ></textarea>
+          </label>
+
+          <div class="divider"></div>
+
           <h2 data-i18n="setup.language">Interface Language</h2>
           <label>
             <span data-i18n="setup.language">Interface Language</span>
@@ -137,7 +180,7 @@
         <main class="timeline">
           <div class="timeline-header">
             <h2 data-i18n="timeline.section">Timeline</h2>
-            <div class="row">
+            <div class="row timeline-actions">
               <button id="forkBranch" class="ghost" data-i18n="timeline.fork_branch">
                 Fork Branch
               </button>

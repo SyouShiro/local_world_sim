@@ -10,6 +10,7 @@ from app.services.event_dice import EventDiceService
 from app.services.memory_service import MemoryService
 from app.services.provider_service import ProviderService
 from app.services.prompt_builder import PromptBuilder
+from app.services.worldline_context_service import WorldlineContextService
 
 
 class SimulationService:
@@ -22,12 +23,19 @@ class SimulationService:
         provider_service: ProviderService,
         memory_service: MemoryService,
         event_dice_service: EventDiceService,
+        worldline_context_service: WorldlineContextService | None = None,
     ) -> None:
         self._sessionmaker = sessionmaker
         self._prompt_builder = prompt_builder
         self._provider_service = provider_service
         self._memory_service = memory_service
         self._event_dice_service = event_dice_service
+        self._worldline_context_service = worldline_context_service or WorldlineContextService()
+
+    def set_memory_service(self, memory_service: MemoryService) -> None:
+        """Swap memory service implementation at runtime."""
+
+        self._memory_service = memory_service
 
     async def generate_next(self, session_id: str) -> TimelineMessage:
         """Generate the next timeline report for the active branch."""
@@ -43,7 +51,7 @@ class SimulationService:
             if not session.active_branch_id:
                 raise ValueError("Session has no active branch")
 
-            timeline = await message_repo.list_messages(session.active_branch_id, limit=12)
+            timeline = await message_repo.list_messages(session.active_branch_id, limit=40)
             interventions = await message_repo.list_pending_interventions(
                 session.id, session.active_branch_id, limit=20
             )
@@ -67,6 +75,7 @@ class SimulationService:
                 timeline_step_unit=snapshot["timeline_step_unit"],
                 next_seq=next_seq,
             )
+            worldline_context = self._worldline_context_service.build_context(timeline)
 
         memory_query = self._build_memory_query(
             world_preset=snapshot["world_preset"],
@@ -93,6 +102,7 @@ class SimulationService:
             timeline_step_value=snapshot["timeline_step_value"],
             timeline_step_unit=snapshot["timeline_step_unit"],
             event_dice_plan=event_dice_plan,
+            worldline_context=worldline_context,
         )
         adapter, runtime_cfg = await self._provider_service.get_generation_config(session_id)
         result = await adapter.generate(runtime_cfg, prompt_messages, stream=False)

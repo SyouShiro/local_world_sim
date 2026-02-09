@@ -1,6 +1,6 @@
 ﻿export const store = {
   session: null,
-  locale: "en",
+  locale: "zh-CN",
   branches: [],
   activeBranchId: null,
   timelineByBranch: {},

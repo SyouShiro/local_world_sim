@@ -42,3 +42,12 @@ class ProviderSelectResponse(APIModel):
     """Response returned after selecting a model."""
 
     model_name: str
+
+
+class ProviderCurrentResponse(APIModel):
+    """Current provider config summary for a session."""
+
+    provider: Optional[ProviderName]
+    base_url: Optional[str]
+    model_name: Optional[str]
+    has_api_key: bool = Field(default=False)

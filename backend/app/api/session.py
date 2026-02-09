@@ -3,7 +3,7 @@
 from datetime import datetime, timezone
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
@@ -15,6 +15,9 @@ from app.repos.session_repo import SessionRepo
 from app.schemas.session import (
     SessionCreateRequest,
     SessionCreateResponse,
+    SessionDetailResponse,
+    SessionHistoryItem,
+    SessionHistoryResponse,
     SessionSettingsPatch,
     SessionStateResponse,
 )
@@ -92,6 +95,59 @@ async def create_session(
         timeline_start_iso=timeline_start_iso,
         timeline_step_value=timeline_step_value,
         timeline_step_unit=timeline_step_unit,
+    )
+
+
+@router.get("/history", response_model=SessionHistoryResponse)
+async def list_session_history(
+    limit: int = Query(default=30, ge=1, le=200),
+    db: AsyncSession = Depends(get_session),
+) -> SessionHistoryResponse:
+    """List recent local sessions for resume/replay."""
+
+    session_repo = SessionRepo(db)
+    sessions = await session_repo.list_recent_sessions(limit=limit)
+    return SessionHistoryResponse(
+        sessions=[
+            SessionHistoryItem(
+                session_id=item.id,
+                title=item.title,
+                active_branch_id=item.active_branch_id,
+                running=item.running,
+                updated_at=item.updated_at,
+                created_at=item.created_at,
+            )
+            for item in sessions
+        ]
+    )
+
+
+@router.get("/{session_id}", response_model=SessionDetailResponse)
+async def get_session_detail(
+    session_id: str,
+    db: AsyncSession = Depends(get_session),
+) -> SessionDetailResponse:
+    """Return session detail including timeline/language preferences."""
+
+    session_repo = SessionRepo(db)
+    pref_repo = SessionPreferenceRepo(db)
+    session = await session_repo.get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
+
+    preference = await pref_repo.get_by_session(session_id)
+    return SessionDetailResponse(
+        session_id=session.id,
+        title=session.title,
+        world_preset=session.world_preset,
+        tick_label=session.tick_label,
+        post_gen_delay_sec=session.post_gen_delay_sec,
+        running=session.running,
+        active_branch_id=session.active_branch_id,
+        output_language=preference.output_language if preference else None,
+        timeline_start_iso=preference.timeline_start_iso if preference else None,
+        timeline_step_value=preference.timeline_step_value if preference else None,
+        timeline_step_unit=preference.timeline_step_unit if preference else None,
     )
 
 

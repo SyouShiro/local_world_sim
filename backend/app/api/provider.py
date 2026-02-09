@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.providers.base import ProviderError
 from app.schemas.provider import (
+    ProviderCurrentResponse,
     ProviderModelsResponse,
     ProviderSelectRequest,
     ProviderSelectResponse,
@@ -73,6 +74,29 @@ async def select_model(
             detail=exc.message,
         ) from exc
     return ProviderSelectResponse(model_name=config.model_name or "")
+
+
+@router.get("/{session_id}/current", response_model=ProviderCurrentResponse)
+async def get_current_provider(
+    session_id: str,
+    provider_service: ProviderService = Depends(get_provider_service),
+) -> ProviderCurrentResponse:
+    """Return current provider selection summary for one session."""
+
+    config = await provider_service.get_current_config(session_id)
+    if not config:
+        return ProviderCurrentResponse(
+            provider=None,
+            base_url=None,
+            model_name=None,
+            has_api_key=False,
+        )
+    return ProviderCurrentResponse(
+        provider=config.provider,  # type: ignore[arg-type]
+        base_url=config.base_url,
+        model_name=config.model_name,
+        has_api_key=bool(config.api_key_encrypted),
+    )
 
 
 def _provider_status(code: str) -> int:

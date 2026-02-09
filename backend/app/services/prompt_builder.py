@@ -21,6 +21,13 @@ class PromptBuilder:
         self._memory_max_chars = max(200, memory_max_chars)
         self._memory_max_tokens = max(50, memory_max_chars // 4)
 
+    def update_memory_limits(self, memory_max_snippets: int, memory_max_chars: int) -> None:
+        """Apply runtime memory prompt limits."""
+
+        self._memory_max_snippets = max(1, memory_max_snippets)
+        self._memory_max_chars = max(200, memory_max_chars)
+        self._memory_max_tokens = max(50, memory_max_chars // 4)
+
     def build_messages(
         self,
         world_preset: str,
@@ -33,6 +40,7 @@ class PromptBuilder:
         timeline_step_value: int = 1,
         timeline_step_unit: str = "month",
         event_dice_plan: EventDicePlan | None = None,
+        worldline_context: str | None = None,
     ) -> List[dict]:
         """Create the message list for an LLM provider."""
 
@@ -45,6 +53,7 @@ class PromptBuilder:
             "Use this JSON schema for events: "
             "events: [{\"category\":\"positive|negative|neutral\","
             "\"severity\":\"low|medium|high\",\"description\":\"...\"}]. "
+            "Each event.description must be a news-style brief of 2-3 sentences, never more than 3 sentences. "
             f"Keep human-readable values in {language_hint}."
         )
         history_lines = []
@@ -55,43 +64,34 @@ class PromptBuilder:
         intervention_text = "\n".join(intervention_lines) if intervention_lines else "(none)"
 
         memory_section = self._build_memory_section(memory_snippets)
+        worldline_section = self._build_worldline_section(worldline_context)
         dice_guidance = self._build_dice_guidance(event_dice_plan)
+        memory_block = ""
         if memory_section:
-            user_prompt = (
-                "World preset:\n"
-                f"{world_preset}\n\n"
-                "Recent timeline:\n"
-                f"{history_text}\n\n"
-                "Timeline clock:\n"
-                f"Start at: {timeline_start_iso or '(auto)'}\n"
-                f"Step: {timeline_step_value} {timeline_step_unit}\n\n"
-                "Event dice guidance:\n"
-                f"{dice_guidance}\n\n"
+            memory_block = (
                 "Long-term memory context:\n"
                 f"{memory_section}\n\n"
-                "Pending interventions:\n"
-                f"{intervention_text}\n\n"
-                f"Time advance label: {tick_label}\n"
-                "Return JSON only. "
-                "The events array must contain between 1 and 5 items and follow dice guidance."
             )
-        else:
-            user_prompt = (
-                "World preset:\n"
-                f"{world_preset}\n\n"
-                "Recent timeline:\n"
-                f"{history_text}\n\n"
-                "Timeline clock:\n"
-                f"Start at: {timeline_start_iso or '(auto)'}\n"
-                f"Step: {timeline_step_value} {timeline_step_unit}\n\n"
-                "Event dice guidance:\n"
-                f"{dice_guidance}\n\n"
-                "Pending interventions:\n"
-                f"{intervention_text}\n\n"
-                f"Time advance label: {tick_label}\n"
-                "Return JSON only. "
-                "The events array must contain between 1 and 5 items and follow dice guidance."
-            )
+        user_prompt = (
+            "World preset:\n"
+            f"{world_preset}\n\n"
+            "Worldline continuity record:\n"
+            f"{worldline_section}\n\n"
+            "Recent timeline:\n"
+            f"{history_text}\n\n"
+            "Timeline clock:\n"
+            f"Start at: {timeline_start_iso or '(auto)'}\n"
+            f"Step: {timeline_step_value} {timeline_step_unit}\n\n"
+            "Event dice guidance:\n"
+            f"{dice_guidance}\n\n"
+            f"{memory_block}"
+            "Pending interventions:\n"
+            f"{intervention_text}\n\n"
+            f"Time advance label: {tick_label}\n"
+            "Return JSON only. "
+            "The events array must contain between 1 and 5 items and follow dice guidance. "
+            "Each event description should read like a short news dispatch with at most 3 sentences."
+        )
 
         return [
             {"role": "system", "content": system_prompt},
@@ -145,6 +145,14 @@ class PromptBuilder:
                 "No dice override. Produce logically varied events with balanced tones. "
                 "Keep event count between 1 and 5."
             )
+        negative_intensity_hint = (
+            "Negative intensity guidance: include consequential crises when warranted, "
+            "such as war escalation, epidemic spread, mass casualty events, famine, "
+            "severe natural disasters, man-made disasters, and major accidents. "
+            "Keep causality realistic and proportional to the timeline interval."
+            if plan.negative_min_count > 0
+            else "Negative intensity guidance: keep adverse events plausible but proportionate."
+        )
         return (
             f"Target event count: {plan.target_event_count} (1-5).\n"
             f"Minimum positive events: {plan.positive_min_count}.\n"
@@ -154,8 +162,16 @@ class PromptBuilder:
             f"Geopolitical hint: {plan.geopolitical_hint}\n"
             f"Scale hint: {plan.scale_hint}\n"
             f"Interval hint: {plan.interval_hint}\n"
+            f"{negative_intensity_hint}\n"
             "Avoid over-specific deterministic causes; keep surprises plausible and coherent."
         )
+
+    @staticmethod
+    def _build_worldline_section(worldline_context: str | None) -> str:
+        text = (worldline_context or "").strip()
+        if not text:
+            return "Trend: not enough confirmed key events yet.\nRisk outlook: uncertain.\nKey continuity anchors:\n- none"
+        return text
 
     @staticmethod
     def _language_name(code: str) -> str:

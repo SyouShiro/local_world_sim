@@ -2,9 +2,14 @@ import {
   createSession,
   deleteLastMessage,
   forkBranch,
+  getCurrentProvider,
   getModels,
+  getRuntimeSettings,
+  getSessionDetail,
   getTimeline,
+  listSessionHistory,
   listBranches,
+  patchRuntimeSettings,
   pauseSession,
   resumeSession,
   updateSettings,
@@ -50,12 +55,19 @@ const elements = {
   postDelay: document.getElementById("postDelay"),
   languageSelect: document.getElementById("languageSelect"),
   createBtn: document.getElementById("createSession"),
+  loadSessionId: document.getElementById("loadSessionId"),
+  loadSessionBtn: document.getElementById("loadSession"),
+  refreshSessionHistoryBtn: document.getElementById("refreshSessionHistory"),
+  sessionHistoryList: document.getElementById("sessionHistoryList"),
   providerSelect: document.getElementById("providerSelect"),
   apiKey: document.getElementById("apiKey"),
   rememberApiKey: document.getElementById("rememberApiKey"),
   baseUrl: document.getElementById("baseUrl"),
   loadModelsBtn: document.getElementById("loadModels"),
   modelSelect: document.getElementById("modelSelect"),
+  runtimeSettingsEditor: document.getElementById("runtimeSettingsEditor"),
+  loadRuntimeSettingsBtn: document.getElementById("loadRuntimeSettings"),
+  applyRuntimeSettingsBtn: document.getElementById("applyRuntimeSettings"),
   startBtn: document.getElementById("startSession"),
   pauseBtn: document.getElementById("pauseSession"),
   resumeBtn: document.getElementById("resumeSession"),
@@ -66,6 +78,8 @@ const elements = {
   sendInterventionBtn: document.getElementById("sendIntervention"),
   branchTabs: document.getElementById("branchTabs"),
 };
+
+const LAST_SESSION_ID_KEY = "worldline.lastSessionId.v1";
 
 const providerDefaults = {
   openai: "https://api.openai.com",
@@ -272,6 +286,197 @@ function persistApiKeyIfNeeded(provider, apiKey) {
   clearProviderApiKey(provider);
 }
 
+function getEffectiveApiKey(provider) {
+  const inlineKey = String(elements.apiKey.value || "").trim();
+  if (inlineKey) return inlineKey;
+  if (!elements.rememberApiKey.checked) return "";
+  return String(loadProviderApiKey(provider) || "").trim();
+}
+
+function buildCurrentProviderState() {
+  const provider = elements.providerSelect.value;
+  const selectedModel = elements.modelSelect.value || store.provider.model || null;
+  const currentModels = store.provider.name === provider ? store.provider.models || [] : [];
+  const models = [...currentModels];
+  if (selectedModel && !models.includes(selectedModel)) {
+    models.unshift(selectedModel);
+  }
+  return {
+    name: provider,
+    baseUrl: elements.baseUrl.value || providerDefaults[provider] || "",
+    model: selectedModel,
+    models,
+  };
+}
+
+function connectSessionSocket(sessionId) {
+  connectWebSocket(sessionId, {
+    onOpen: async () => {
+      syncConnectionState("connected");
+      logInfo("log.ws_connected");
+      await loadBranches();
+      await loadTimeline();
+    },
+    onClose: () => {
+      syncConnectionState("disconnected");
+      logInfo("log.ws_disconnected_reconnecting");
+    },
+    onEvent: handleWsEvent,
+    onError: (err) => logError("error.ws_error", err),
+  });
+}
+
+async function hydrateProviderForSession(sessionId) {
+  try {
+    const current = await getCurrentProvider(sessionId);
+    if (!current.provider) {
+      const fallback = buildCurrentProviderState();
+      setStore({ provider: fallback });
+      renderModelOptions(fallback.models || []);
+      if (fallback.model) {
+        elements.modelSelect.value = fallback.model;
+      }
+      return;
+    }
+
+    elements.providerSelect.value = current.provider;
+    applyProviderDefaults(current.provider, false);
+    elements.baseUrl.value = current.base_url || providerDefaults[current.provider] || "";
+    loadLocalApiKeyForProvider(current.provider, true);
+
+    let models = [];
+    if (current.has_api_key) {
+      try {
+        const response = await getModels(sessionId, current.provider);
+        models = response.models || [];
+      } catch (_) {
+        models = [];
+      }
+    }
+
+    const selectedModel = current.model_name || null;
+    if (selectedModel && !models.includes(selectedModel)) {
+      models.unshift(selectedModel);
+    }
+
+    setStore({
+      provider: {
+        name: current.provider,
+        baseUrl: elements.baseUrl.value || "",
+        model: selectedModel,
+        models,
+      },
+    });
+    renderModelOptions(models);
+    if (selectedModel) {
+      elements.modelSelect.value = selectedModel;
+    }
+  } catch (err) {
+    logError("error.provider_restore_failed", err);
+  }
+}
+
+async function tryRebindProviderToSession(sessionId) {
+  const providerState = buildCurrentProviderState();
+  if (!providerState.model) return;
+  try {
+    await setProvider(sessionId, {
+      provider: providerState.name,
+      api_key: getEffectiveApiKey(providerState.name) || null,
+      base_url: providerState.baseUrl || null,
+      model_name: providerState.model,
+    });
+    setStore({ provider: providerState });
+    logInfo("log.provider_rebound", { model: providerState.model });
+  } catch (err) {
+    logError("log.provider_rebound_failed", err);
+  }
+}
+
+function parseRuntimeSettingsEditor() {
+  const raw = String(elements.runtimeSettingsEditor.value || "").trim();
+  if (!raw) return {};
+  const parsed = JSON.parse(raw);
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("invalid settings payload");
+  }
+  if (parsed.updates && typeof parsed.updates === "object" && !Array.isArray(parsed.updates)) {
+    return parsed.updates;
+  }
+  if (parsed.settings && typeof parsed.settings === "object" && !Array.isArray(parsed.settings)) {
+    return parsed.settings;
+  }
+  return parsed;
+}
+
+function saveLastSessionId(sessionId) {
+  const value = String(sessionId || "").trim();
+  if (!value) return;
+  localStorage.setItem(LAST_SESSION_ID_KEY, value);
+}
+
+function loadLastSessionId() {
+  return String(localStorage.getItem(LAST_SESSION_ID_KEY) || "").trim();
+}
+
+function formatSessionTime(isoTime) {
+  const raw = String(isoTime || "").trim();
+  if (!raw) return "";
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return "";
+  return new Intl.DateTimeFormat(getCurrentLocale(), {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(parsed);
+}
+
+function renderSessionHistory(sessions) {
+  elements.sessionHistoryList.innerHTML = "";
+  const rows = Array.isArray(sessions) ? sessions : [];
+  if (rows.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "session-history-empty";
+    empty.textContent = t("setup.history_empty");
+    elements.sessionHistoryList.appendChild(empty);
+    return;
+  }
+
+  rows.forEach((item) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "session-history-item";
+
+    const title = document.createElement("strong");
+    title.textContent = item.title || `${t("setup.load_session_id")} ${item.session_id.slice(0, 10)}`;
+    button.appendChild(title);
+
+    const meta = document.createElement("span");
+    const runnerLabel = item.running ? t("state.runner.running") : t("state.runner.paused");
+    meta.textContent = `${item.session_id} · ${formatSessionTime(item.updated_at)} · ${runnerLabel}`;
+    button.appendChild(meta);
+
+    button.addEventListener("click", () => {
+      elements.loadSessionId.value = item.session_id;
+      handleLoadSession().catch((err) => logError("error.load_session_failed", err));
+    });
+
+    elements.sessionHistoryList.appendChild(button);
+  });
+}
+
+async function handleRefreshSessionHistory() {
+  try {
+    const response = await listSessionHistory(50);
+    renderSessionHistory(response.sessions || []);
+    logInfo("log.history_loaded");
+  } catch (err) {
+    logError("error.history_load_failed", err);
+  }
+}
+
 async function loadBranches() {
   if (!store.session) return;
   const data = await listBranches(store.session.session_id);
@@ -291,8 +496,93 @@ async function loadTimeline() {
   }
 }
 
+async function handleLoadSession() {
+  const sessionId = String(elements.loadSessionId.value || "").trim();
+  if (!sessionId) {
+    logInfo("log.load_session_id_required");
+    return;
+  }
+  try {
+    const detail = await getSessionDetail(sessionId);
+    const sessionLocale = detail.output_language || getCurrentLocale();
+    if (sessionLocale !== getCurrentLocale()) {
+      await setLocale(sessionLocale);
+      setStore({ locale: getCurrentLocale() });
+      applyLocalePresentation();
+      fillLanguageOptions();
+      renderIntervalUnitOptions();
+    }
+
+    elements.title.value = detail.title || "";
+    elements.worldPreset.value = detail.world_preset || "";
+    elements.postDelay.value = String(detail.post_gen_delay_sec || 5);
+
+    const timelineConfig = {
+      initialTimeISO: detail.timeline_start_iso || new Date().toISOString(),
+      stepValue: detail.timeline_step_value || 1,
+      stepUnit: detail.timeline_step_unit || "month",
+    };
+    setStore({
+      session: {
+        session_id: detail.session_id,
+        active_branch_id: detail.active_branch_id,
+        running: detail.running,
+      },
+      branches: [],
+      activeBranchId: detail.active_branch_id || null,
+      runnerState: detail.running ? "running" : "paused",
+      timelineByBranch: {},
+      timelineConfig,
+      provider: buildCurrentProviderState(),
+    });
+
+    applyTimelineConfigToInputs(timelineConfig);
+    elements.tickLabel.value = detail.tick_label || formatIntervalLabel(timelineConfig.stepValue, timelineConfig.stepUnit);
+    elements.loadSessionId.value = detail.session_id;
+    saveLastSessionId(detail.session_id);
+
+    closeWebSocket();
+    setSessionId(detail.session_id);
+    syncRunnerState(detail.running ? "running" : "paused");
+    syncConnectionState("disconnected");
+    renderBranchTabs();
+    setControlsEnabled(true);
+
+    await hydrateProviderForSession(detail.session_id);
+    await loadBranches();
+    await loadTimeline();
+    await handleRefreshSessionHistory();
+    connectSessionSocket(detail.session_id);
+    logInfo("log.session_loaded", { session: detail.session_id });
+  } catch (err) {
+    logError("error.load_session_failed", err);
+  }
+}
+
+async function handleLoadRuntimeSettings() {
+  try {
+    const response = await getRuntimeSettings();
+    elements.runtimeSettingsEditor.value = JSON.stringify(response.settings || {}, null, 2);
+    logInfo("log.runtime_settings_loaded");
+  } catch (err) {
+    logError("error.runtime_settings_load_failed", err);
+  }
+}
+
+async function handleApplyRuntimeSettings() {
+  try {
+    const updates = parseRuntimeSettingsEditor();
+    const response = await patchRuntimeSettings({ updates });
+    elements.runtimeSettingsEditor.value = JSON.stringify(response.settings || {}, null, 2);
+    logInfo("log.runtime_settings_applied");
+  } catch (err) {
+    logError("error.runtime_settings_apply_failed", err);
+  }
+}
+
 async function handleCreateSession() {
   try {
+    const providerState = buildCurrentProviderState();
     const timelineConfig = buildTimelineConfigFromInputs();
     const payload = {
       title: elements.title.value || null,
@@ -319,41 +609,29 @@ async function handleCreateSession() {
         stepValue: result.timeline_step_value || timelineConfig.stepValue,
         stepUnit: result.timeline_step_unit || timelineConfig.stepUnit,
       },
-      provider: {
-        name: elements.providerSelect.value,
-        baseUrl: elements.baseUrl.value || "",
-        model: null,
-        models: [],
-      },
+      provider: providerState,
     });
 
     applyTimelineConfigToInputs(store.timelineConfig);
+    elements.loadSessionId.value = result.session_id;
+    saveLastSessionId(result.session_id);
 
     setSessionId(result.session_id);
     syncRunnerState("idle");
     syncConnectionState("disconnected");
-    renderModelOptions([]);
+    renderModelOptions(providerState.models || []);
+    if (providerState.model) {
+      elements.modelSelect.value = providerState.model;
+    }
     renderBranchTabs();
     setControlsEnabled(true);
     logInfo("log.session_created");
 
+    await tryRebindProviderToSession(result.session_id);
     await loadBranches();
     await loadTimeline();
-
-    connectWebSocket(result.session_id, {
-      onOpen: async () => {
-        syncConnectionState("connected");
-        logInfo("log.ws_connected");
-        await loadBranches();
-        await loadTimeline();
-      },
-      onClose: () => {
-        syncConnectionState("disconnected");
-        logInfo("log.ws_disconnected_reconnecting");
-      },
-      onEvent: handleWsEvent,
-      onError: (err) => logError("error.ws_error", err),
-    });
+    await handleRefreshSessionHistory();
+    connectSessionSocket(result.session_id);
   } catch (err) {
     logError("error.create_failed", err);
   }
@@ -381,7 +659,8 @@ async function handleLoadModels() {
   if (!store.session) return;
   try {
     const provider = elements.providerSelect.value;
-    const apiKey = elements.apiKey.value || null;
+    const apiKey = getEffectiveApiKey(provider) || null;
+    const previousModel = store.provider.model;
     const payload = {
       provider,
       api_key: apiKey,
@@ -391,15 +670,19 @@ async function handleLoadModels() {
     await setProvider(store.session.session_id, payload);
     const response = await getModels(store.session.session_id, payload.provider);
     const models = response.models || [];
+    const retainedModel = previousModel && models.includes(previousModel) ? previousModel : null;
     setStore({
       provider: {
         name: payload.provider,
         baseUrl: payload.base_url || "",
-        model: null,
+        model: retainedModel,
         models,
       },
     });
     renderModelOptions(models);
+    if (retainedModel) {
+      elements.modelSelect.value = retainedModel;
+    }
     persistApiKeyIfNeeded(provider, apiKey || "");
     logInfo("log.models_loaded");
     setControlsEnabled(true);
@@ -549,15 +832,23 @@ function handleWsEvent(event) {
     if (event.provider !== elements.providerSelect.value) {
       return;
     }
+    const models = event.models || [];
+    const retainedModel =
+      store.provider.model && models.includes(store.provider.model)
+        ? store.provider.model
+        : null;
     setStore({
       provider: {
         ...store.provider,
         name: event.provider,
-        model: null,
-        models: event.models,
+        model: retainedModel,
+        models,
       },
     });
-    renderModelOptions(event.models || []);
+    renderModelOptions(models);
+    if (retainedModel) {
+      elements.modelSelect.value = retainedModel;
+    }
     logInfo("log.models_loaded_ws");
     setControlsEnabled(Boolean(store.session));
     return;
@@ -580,9 +871,13 @@ async function handleLanguageChange() {
   syncConnectionState(store.connectionState);
   applyProviderDefaults(elements.providerSelect.value, false);
   renderModelOptions(store.provider.models || []);
+  if (store.provider.model) {
+    elements.modelSelect.value = store.provider.model;
+  }
   renderBranchTabs();
   const activeTimeline = store.timelineByBranch[store.activeBranchId] || [];
   renderTimeline(activeTimeline, store.timelineConfig);
+  handleRefreshSessionHistory().catch(() => {});
   if (store.session?.session_id) {
     try {
       await updateSettings(store.session.session_id, {
@@ -631,6 +926,8 @@ async function handleTimelineConfigChange() {
 }
 
 elements.createBtn.addEventListener("click", handleCreateSession);
+elements.loadSessionBtn.addEventListener("click", handleLoadSession);
+elements.refreshSessionHistoryBtn.addEventListener("click", handleRefreshSessionHistory);
 elements.languageSelect.addEventListener("change", () => {
   handleLanguageChange().catch((err) => logError("log.language_sync_failed", err));
 });
@@ -654,6 +951,8 @@ elements.refreshBtn.addEventListener("click", loadTimeline);
 elements.forkBtn.addEventListener("click", handleForkBranch);
 elements.deleteLastBtn.addEventListener("click", handleDeleteLast);
 elements.sendInterventionBtn.addEventListener("click", handleSendIntervention);
+elements.loadRuntimeSettingsBtn.addEventListener("click", handleLoadRuntimeSettings);
+elements.applyRuntimeSettingsBtn.addEventListener("click", handleApplyRuntimeSettings);
 
 async function bootstrap() {
   await initI18n();
@@ -672,6 +971,8 @@ async function bootstrap() {
     timelineConfig: buildTimelineConfigFromInputs(),
   });
 
+  elements.loadSessionId.value = loadLastSessionId();
+  elements.runtimeSettingsEditor.value = "{}";
   setControlsEnabled(false);
   setSessionId(null);
   syncConnectionState("disconnected");
@@ -680,6 +981,7 @@ async function bootstrap() {
   renderBranchTabs();
   applyProviderDefaults(elements.providerSelect.value);
   loadLocalApiKeyForProvider(elements.providerSelect.value, true);
+  await handleRefreshSessionHistory();
 }
 
 bootstrap().catch((err) => {
