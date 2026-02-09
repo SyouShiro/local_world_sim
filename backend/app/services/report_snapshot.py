@@ -94,11 +94,8 @@ def parse_report_snapshot(content: str, *, fallback_time_advance: str = "tick") 
         candidates.append(extracted)
 
     for candidate in candidates:
-        try:
-            payload = json.loads(candidate)
-        except json.JSONDecodeError:
-            continue
-        if not isinstance(payload, Mapping):
+        payload = _load_json_mapping(candidate)
+        if payload is None:
             continue
         return normalize_report_snapshot(payload, fallback_time_advance=fallback_time_advance)
     return None
@@ -373,6 +370,41 @@ def _extract_json_object(content: str) -> str:
     if start == -1 or end == -1 or end <= start:
         return ""
     return content[start : end + 1].strip()
+
+
+def _load_json_mapping(content: str) -> Mapping[str, Any] | None:
+    for candidate in _json_repair_candidates(content):
+        try:
+            payload = json.loads(candidate)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(payload, Mapping):
+            return payload
+    return None
+
+
+def _json_repair_candidates(content: str) -> list[str]:
+    candidates = [content]
+    repaired = _repair_json_object(content)
+    if repaired != content:
+        candidates.append(repaired)
+    return candidates
+
+
+def _repair_json_object(content: str) -> str:
+    text = str(content or "")
+    text = re.sub(r",\s*([}\]])", r"\1", text)
+    text = re.sub(
+        r'([,{]\s*)([A-Za-z_][A-Za-z0-9_]*)"\s*:',
+        r'\1"\2":',
+        text,
+    )
+    text = re.sub(
+        r'([,{]\s*)([A-Za-z_][A-Za-z0-9_]*)\s*:',
+        r'\1"\2":',
+        text,
+    )
+    return text
 
 
 def _first_sentence(text: str) -> str:
