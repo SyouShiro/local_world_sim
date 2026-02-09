@@ -48,12 +48,16 @@ class PromptBuilder:
         system_prompt = (
             "You are generating a world progress report. "
             "Keep it concise, structured, and continuous. "
-            "Output JSON with title, time_advance, summary, events, and risks. "
+            "Output JSON with title, time_advance, summary, events, risks, crisis_focus, and tension_percent. "
             "Keep JSON keys in English. "
             "Use this JSON schema for events: "
             "events: [{\"category\":\"positive|negative|neutral\","
             "\"severity\":\"low|medium|high\",\"description\":\"...\"}]. "
             "Each event.description must be a news-style brief of 2-3 sentences, never more than 3 sentences. "
+            "crisis_focus must be a broad crisis noun label (1-4 words), "
+            "such as war, famine, epidemic, financial crisis, drought, "
+            "or in Chinese like 战争, 饥荒, 瘟疫, 金融危机. "
+            "Do not put sentences, locations, numbers, causes, or operational details in crisis_focus. "
             f"Keep human-readable values in {language_hint}."
         )
         history_lines = []
@@ -90,7 +94,9 @@ class PromptBuilder:
             f"Time advance label: {tick_label}\n"
             "Return JSON only. "
             "The events array must contain between 1 and 5 items and follow dice guidance. "
-            "Each event description should read like a short news dispatch with at most 3 sentences."
+            "Each event description should read like a short news dispatch with at most 3 sentences. "
+            "For crisis_focus, return only a short broad category noun (1-4 words), "
+            "for example: 战争 / 饥荒 / 瘟疫 / 金融危机."
         )
 
         return [
