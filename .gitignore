@@ -5,3 +5,4 @@ worldline.db
 *.db
 *.sqlite
 backend/.local/
+*.pyc
