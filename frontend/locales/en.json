@@ -53,6 +53,7 @@
   "settings.hint": "Load and patch runtime settings without restart.",
   "settings.load": "Load Settings",
   "settings.apply": "Apply Settings",
+  "settings.copyright": "© Syoushiro. All rights reserved, and have fun playing.",
   "settings.editor_label": "Runtime settings JSON",
   "settings.editor_placeholder": "Paste JSON or click Load Settings first",
   "settings.value.true": "Enabled",

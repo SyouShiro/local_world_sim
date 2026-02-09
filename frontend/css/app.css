@@ -820,6 +820,14 @@ button.small {
   gap: 12px;
 }
 
+.settings-copyright {
+  margin: 4px 0 0;
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.84rem;
+  letter-spacing: 0.02em;
+}
+
 .setting-item {
   border: 1px solid var(--border);
   border-radius: 12px;

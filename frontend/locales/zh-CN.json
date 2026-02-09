@@ -53,6 +53,7 @@
   "settings.hint": "可读取并热更新运行时配置，无需重启。",
   "settings.load": "读取设置",
   "settings.apply": "应用设置",
+  "settings.copyright": "© Syoushiro 版权所有，祝你们玩得开心。",
   "settings.editor_label": "运行时配置 JSON",
   "settings.editor_placeholder": "粘贴 JSON，或先点击“读取设置”",
   "settings.value.true": "开启",
