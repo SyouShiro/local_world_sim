@@ -679,27 +679,34 @@ function createEventSection(title, rows, timelineConfig) {
     const severity = inferEventSeverity(row, timelineConfig);
     const categoryClass = `category-${normalizeEventCategory(row.category)}`;
     const severityClass = `severity-${severity.level}`;
-    const eventCard = document.createElement("article");
-    eventCard.className = `timeline-event timeline-event-card ${categoryClass} ${severityClass}`;
+    const details = document.createElement("details");
+    details.className = `timeline-event ${categoryClass} ${severityClass}`;
+    details.open = true;
 
     const bar = document.createElement("span");
     bar.className = `timeline-event-bar ${categoryClass} ${severityClass}`;
-    eventCard.appendChild(bar);
+    details.appendChild(bar);
 
-    const head = document.createElement("div");
-    head.className = "timeline-event-summary";
+    const summary = document.createElement("summary");
+    const summaryWrap = document.createElement("div");
+    summaryWrap.className = "timeline-event-summary";
     const meta = document.createElement("span");
     meta.className = "timeline-event-title";
-    meta.textContent = `${eventCategoryLabel(row.category)} · ${t("timeline.card.severity")}${severity.label}`;
-    head.appendChild(meta);
-    eventCard.appendChild(head);
+    meta.textContent = eventCategoryLabel(row.category);
+    const severityLabelNode = document.createElement("span");
+    severityLabelNode.className = "timeline-event-severity";
+    severityLabelNode.textContent = `${t("timeline.card.severity")}：${severity.label}`;
+    summaryWrap.appendChild(meta);
+    summaryWrap.appendChild(severityLabelNode);
+    summary.appendChild(summaryWrap);
+    details.appendChild(summary);
 
     const content = document.createElement("p");
     content.className = "timeline-event-content";
     content.textContent = toNewsBrief(row.description);
-    eventCard.appendChild(content);
+    details.appendChild(content);
 
-    wrap.appendChild(eventCard);
+    wrap.appendChild(details);
   });
   section.appendChild(wrap);
   return section;

@@ -469,6 +469,7 @@ button:disabled {
 
 .timeline-metric-value-focus {
   font-weight: 600;
+  font-size: 14px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -580,9 +581,14 @@ button.small {
   overflow: hidden;
 }
 
-.timeline-event-card {
-  display: flex;
-  flex-direction: column;
+.timeline-event summary {
+  cursor: pointer;
+  list-style: none;
+  color: var(--ink);
+}
+
+.timeline-event summary::-webkit-details-marker {
+  display: none;
 }
 
 .timeline-event-bar {
@@ -592,12 +598,22 @@ button.small {
 }
 
 .timeline-event-summary {
-  padding: 8px 10px 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px 6px;
 }
 
 .timeline-event-title {
   font-size: 0.8rem;
   letter-spacing: 0.04em;
+}
+
+.timeline-event-severity {
+  font-size: 0.72rem;
+  color: var(--muted);
+  white-space: nowrap;
 }
 
 .timeline-event-content {
