@@ -103,6 +103,24 @@ body::after {
   font-family: "Copperplate", "Copperplate Gothic Light", serif;
 }
 
+.hero-title-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.app-version-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  background: rgba(8, 14, 26, 0.56);
+}
+
 .subtitle {
   margin: 8px 0 0;
   max-width: 500px;
@@ -878,6 +896,20 @@ button.small {
   color: var(--muted);
   font-size: 0.84rem;
   letter-spacing: 0.02em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.settings-version-tag {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 1px 8px;
+  font-size: 0.74rem;
+  color: var(--muted);
+  background: rgba(8, 14, 26, 0.56);
 }
 
 .setting-item {

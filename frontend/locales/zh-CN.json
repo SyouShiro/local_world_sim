@@ -60,6 +60,7 @@
   "settings.value.false": "关闭",
   "settings.desc.default": "运行时配置项。修改后会立即生效并写回 .env。",
   "settings.desc.APP_ENV": "运行环境标识（如 dev / prod）。",
+  "settings.desc.APP_VERSION": "界面与打包版本号（如 1.0、1.2.3）。",
   "settings.desc.APP_HOST": "后端服务监听地址。",
   "settings.desc.APP_PORT": "后端服务监听端口。",
   "settings.desc.CORS_ORIGINS": "允许访问后端的前端来源，多个地址用逗号分隔。",

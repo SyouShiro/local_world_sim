@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
     app_env: str = Field(default="dev", alias="APP_ENV")
+    app_version: str = Field(default="1.0", alias="APP_VERSION")
     app_host: str = Field(default="0.0.0.0", alias="APP_HOST")
     app_port: int = Field(default=8000, alias="APP_PORT")
     # NOTE: Keep as string to avoid pydantic-settings JSON-decoding complex types from .env.

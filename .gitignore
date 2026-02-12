@@ -1,5 +1,6 @@
 __pycache__/
 *.pyc
+.DS_Store
 .idea/
 .env
 backend/.env
@@ -8,3 +9,6 @@ worldline.db
 *.sqlite
 backend/.local/
 *.pyc
+build/
+dist/
+*.spec

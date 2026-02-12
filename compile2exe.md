@@ -25,29 +25,16 @@ conda run -n local_world_sim python -m pip install pyinstaller pyarmor
 
 ## 3. 创建打包入口脚本
 
-在项目根目录新建 `build_tools/pack_entry.py`：
+本仓库已内置打包入口：`build_tools/pack_entry.py`。
 
-```python
-from __future__ import annotations
+它会做三件事：
+- 启动后端（固定 `127.0.0.1:8000`，以匹配前端写死的 API_BASE / WebSocket 地址）。
+- 启动前端静态服务器（默认 `127.0.0.1:5500`，如果被占用会自动换一个空闲端口）。
+- 自动打开浏览器进入前端页面。
 
-import os
-import uvicorn
-
-from app.main import create_app
-
-
-def main() -> None:
-    host = os.getenv("APP_HOST", "127.0.0.1")
-    port = int(os.getenv("APP_PORT", "8000"))
-    app = create_app()
-    uvicorn.run(app, host=host, port=port, log_level="info")
-
-
-if __name__ == "__main__":
-    main()
-```
-
-> 说明：这个入口只负责后端 API。前端仍建议保留 `frontend` 静态目录，通过浏览器访问。
+额外说明：
+- 若运行目录没有 `.env` 或缺少 `APP_SECRET_KEY`，它会自动生成并写入 `.env`（不会打印密钥）。
+- 数据库 `worldline.db` 默认会落在 exe 同目录（方便“关掉再开，世界还在”）。
 
 ## 4. 先混淆（PyArmor）
 
@@ -64,8 +51,9 @@ conda run -n local_world_sim pyinstaller `
   --noconfirm `
   --clean `
   --onefile `
-  --name worldline_backend `
+  --name worldline_sim `
   --paths build/obf `
+  --add-data "frontend;frontend" `
   --collect-all uvicorn `
   --collect-all fastapi `
   --collect-all sqlalchemy `
@@ -77,39 +65,47 @@ conda run -n local_world_sim pyinstaller `
 
 产物在：
 
-- `dist/worldline_backend.exe`
+- `dist/worldline_sim.exe`
+
+## 5.1 推荐：直接用一键脚本
+
+仓库内置了 PowerShell 脚本：`build_tools/build_exe.ps1`，可以一键完成（含可选混淆）。
+
+```powershell
+.\build_tools\build_exe.ps1
+```
+
+不做混淆（只打包）：
+```powershell
+.\build_tools\build_exe.ps1 -NoObf
+```
+
+不显示控制台窗口（双击更“像软件”，但出错不方便看日志）：
+```powershell
+.\build_tools\build_exe.ps1 -NoConsole
+```
 
 ## 6. 运行与分发建议
 
 ### 6.1 本机运行
 
-1. 准备 `.env`（至少设置 `APP_SECRET_KEY`）。
-2. 启动 `worldline_backend.exe`。
-3. 打开前端：`frontend/index.html`（建议通过静态服务器访问）。
+1. 直接启动 `dist/worldline_sim.exe`（或你自定义的名字）。
+2. 它会自动打开浏览器进入前端页面。
 
 ### 6.2 推荐分发目录结构
 
 ```text
 release/
-  worldline_backend.exe
-  frontend/
-  backend/.env.example
-  start_frontend.bat
-```
-
-可选 `start_frontend.bat`：
-
-```bat
-@echo off
-python -m http.server 5500 -d frontend
+  worldline_sim.exe
+  (首次运行后自动生成 .env / worldline.db)
 ```
 
 ## 7. 常见问题
 
 ### 7.1 启动时报 `APP_SECRET_KEY must be set`
 
-- 在运行目录放置 `.env` 并设置 `APP_SECRET_KEY`。
-- 或在系统环境变量里设置 `APP_SECRET_KEY`。
+- 现在 `worldline_sim.exe` 会自动生成 `.env` 并写入 `APP_SECRET_KEY`，一般不会再遇到。
+- 如果你想手动指定：在 exe 同目录放置 `.env` 并设置 `APP_SECRET_KEY`。
 
 ### 7.2 `ModuleNotFoundError` / 缺少依赖
 
@@ -118,8 +114,9 @@ python -m http.server 5500 -d frontend
 
 ### 7.3 前端无法连接后端
 
-- 检查 `frontend/js/api.js` 的 `API_BASE` 是否与 `APP_HOST/APP_PORT` 一致。
-- 检查防火墙与端口占用。
+- 后端固定启动在 `127.0.0.1:8000`（前端写死），因此：
+  - 确认 `8000` 端口未被占用。
+  - 确认防火墙未拦截本机回环地址。
 
 ## 8. 安全加固建议（可选）
 

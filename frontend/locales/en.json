@@ -60,6 +60,7 @@
   "settings.value.false": "Disabled",
   "settings.desc.default": "Runtime setting. Changes apply immediately and persist to .env.",
   "settings.desc.APP_ENV": "Application environment label, such as dev or prod.",
+  "settings.desc.APP_VERSION": "UI and packaging version label, e.g. 1.0 or 1.2.3.",
   "settings.desc.APP_HOST": "Host address used by backend server.",
   "settings.desc.APP_PORT": "Port used by backend server.",
   "settings.desc.CORS_ORIGINS": "Allowed frontend origins, separated by commas.",

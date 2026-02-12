@@ -90,11 +90,15 @@ const elements = {
   interventionInput: document.getElementById("interventionInput"),
   sendInterventionBtn: document.getElementById("sendIntervention"),
   branchTabs: document.getElementById("branchTabs"),
+  appVersionBadge: document.getElementById("appVersionBadge"),
+  appVersionFooter: document.getElementById("appVersionFooter"),
 };
 
 const LAST_SESSION_ID_KEY = "worldline.lastSessionId.v1";
+const DEFAULT_APP_VERSION = "1.0";
 const settingsFieldOrder = [
   "APP_ENV",
+  "APP_VERSION",
   "APP_HOST",
   "APP_PORT",
   "CORS_ORIGINS",
@@ -350,6 +354,31 @@ function applyLocalePresentation() {
   const locale = getCurrentLocale();
   document.documentElement.lang = locale;
   document.body.classList.toggle("locale-zh", locale.toLowerCase().startsWith("zh"));
+}
+
+function normalizeAppVersion(rawValue) {
+  const raw = String(rawValue || "").trim();
+  const clean = raw || DEFAULT_APP_VERSION;
+  if (/^v/i.test(clean)) {
+    return `V${clean.slice(1).trim()}`;
+  }
+  return `V${clean}`;
+}
+
+function renderAppVersion(rawValue) {
+  const label = normalizeAppVersion(rawValue);
+  if (elements.appVersionBadge) {
+    elements.appVersionBadge.textContent = label;
+  }
+  if (elements.appVersionFooter) {
+    elements.appVersionFooter.textContent = label;
+  }
+}
+
+function applyRuntimeSettingsSnapshot(settings) {
+  runtimeSettingsSnapshot = settings || {};
+  renderRuntimeSettingsForm(runtimeSettingsSnapshot);
+  renderAppVersion(runtimeSettingsSnapshot.APP_VERSION);
 }
 
 function normalizeError(error) {
@@ -812,8 +841,7 @@ async function handleLoadSession() {
 async function handleLoadRuntimeSettings() {
   try {
     const response = await getRuntimeSettings();
-    runtimeSettingsSnapshot = response.settings || {};
-    renderRuntimeSettingsForm(runtimeSettingsSnapshot);
+    applyRuntimeSettingsSnapshot(response.settings || {});
     logInfo("log.runtime_settings_loaded");
   } catch (err) {
     logError("error.runtime_settings_load_failed", err);
@@ -824,11 +852,19 @@ async function handleApplyRuntimeSettings() {
   try {
     const updates = collectRuntimeSettingsUpdates();
     const response = await patchRuntimeSettings({ updates });
-    runtimeSettingsSnapshot = response.settings || {};
-    renderRuntimeSettingsForm(runtimeSettingsSnapshot);
+    applyRuntimeSettingsSnapshot(response.settings || {});
     logInfo("log.runtime_settings_applied");
   } catch (err) {
     logError("error.runtime_settings_apply_failed", err);
+  }
+}
+
+async function hydrateVersionLabelSilently() {
+  try {
+    const response = await getRuntimeSettings();
+    applyRuntimeSettingsSnapshot(response.settings || {});
+  } catch (_) {
+    renderAppVersion(DEFAULT_APP_VERSION);
   }
 }
 
@@ -1290,6 +1326,8 @@ async function bootstrap() {
   elements.loadSessionId.value = loadLastSessionId();
   runtimeSettingsSnapshot = {};
   renderRuntimeSettingsForm({});
+  renderAppVersion(DEFAULT_APP_VERSION);
+  await hydrateVersionLabelSilently();
   setSettingsPageOpen(false);
   setControlsEnabled(false);
   setSessionId(null);

@@ -177,6 +177,12 @@ conda run -n local_world_sim python -m pip check
 - 开发环境最简单的恢复方式是备份后删除 `worldline.db` 让其重建（会丢失历史数据）。
 - 若需要保留数据，建议用 `sqlite3` 导出/导入或补一个迁移脚本（后续可以再加 Alembic）。
 
+## 8.5 打包成 EXE（Windows）
+
+如果你想把它打包成一个“点一下就开机”的 `exe`（自动启动前后端并打开浏览器），看这里：
+
+- `compile2exe.md`
+
 ## 9. 长期记忆模块（LightRAG 最小实现）
 
 后端已内置可插拔的 Memory 模块（默认关闭）：

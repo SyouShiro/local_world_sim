@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 import re
+import sys
 from typing import Any
 
 from fastapi import FastAPI
@@ -78,6 +79,7 @@ class RuntimeSettingsService:
             "EVENT_DICE_ENABLED",
             "EVENT_GOOD_EVENT_PROB",
             "EVENT_BAD_EVENT_PROB",
+            "EVENT_REBEL_PROB",
             "EVENT_MIN_EVENTS",
             "EVENT_MAX_EVENTS",
             "EVENT_DEFAULT_HEMISPHERE",
@@ -107,13 +109,23 @@ class RuntimeSettingsService:
             resolved = self._resolve_candidate_path(candidate)
             if resolved.exists():
                 return resolved
+        # Prefer writing to `.env` when no candidate exists (better for packaged builds).
+        for candidate in env_file_candidates:
+            if Path(candidate).name == ".env":
+                return self._resolve_candidate_path(candidate)
         return self._resolve_candidate_path(env_file_candidates[0])
 
     def _resolve_candidate_path(self, candidate: str) -> Path:
         path = Path(candidate)
         if path.is_absolute():
             return path
-        return self._PROJECT_ROOT / path
+        return self._runtime_root() / path
+
+    @classmethod
+    def _runtime_root(cls) -> Path:
+        if getattr(sys, "frozen", False):
+            return Path(sys.executable).resolve().parent
+        return cls._PROJECT_ROOT
 
     def _persist_changed_aliases(self, changed_aliases: set[str]) -> None:
         target = self._env_file_path
