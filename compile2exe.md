@@ -56,7 +56,12 @@ conda run -n local_world_sim pyinstaller `
   --add-data "frontend;frontend" `
   --hidden-import app `
   --hidden-import app.main `
-  --collect-submodules app `
+  --hidden-import app.api `
+  --hidden-import app.api.session `
+  --hidden-import app.api.timeline `
+  --hidden-import app.api.provider `
+  --hidden-import app.api.branch `
+  --hidden-import app.api.websocket `
   --collect-all uvicorn `
   --collect-all fastapi `
   --collect-all sqlalchemy `
@@ -73,6 +78,7 @@ conda run -n local_world_sim pyinstaller `
 ## 5.1 推荐：直接用一键脚本
 
 仓库内置了 PowerShell 脚本：`build_tools/build_exe.ps1`，可以一键完成（含可选混淆）。
+脚本会自动扫描 `app` 包并生成完整 `--hidden-import` 列表，避免 `ModuleNotFoundError: No module named 'app.api'` 这类问题。
 
 ```powershell
 .\build_tools\build_exe.ps1
