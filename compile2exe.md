@@ -54,6 +54,9 @@ conda run -n local_world_sim pyinstaller `
   --name worldline_sim `
   --paths build/obf `
   --add-data "frontend;frontend" `
+  --hidden-import app `
+  --hidden-import app.main `
+  --collect-submodules app `
   --collect-all uvicorn `
   --collect-all fastapi `
   --collect-all sqlalchemy `

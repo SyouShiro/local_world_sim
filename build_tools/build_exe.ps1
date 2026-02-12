@@ -36,6 +36,9 @@ $pyinstallerArgs = @(
   "--name", $name,
   "--add-data", $uiData
 ) + $paths + @(
+  "--hidden-import", "app",
+  "--hidden-import", "app.main",
+  "--collect-submodules", "app",
   "--collect-all", "uvicorn",
   "--collect-all", "fastapi",
   "--collect-all", "sqlalchemy",
