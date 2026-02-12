@@ -68,6 +68,8 @@ conda run -n local_world_sim pyinstaller `
   --collect-all aiosqlite `
   --collect-all pydantic `
   --collect-all pydantic_settings `
+  --collect-all cryptography `
+  --collect-all cffi `
   build/obf/pack_entry.py
 ```
 
@@ -79,6 +81,7 @@ conda run -n local_world_sim pyinstaller `
 
 仓库内置了 PowerShell 脚本：`build_tools/build_exe.ps1`，可以一键完成（含可选混淆）。
 脚本会自动扫描 `app` 包并生成完整 `--hidden-import` 列表，避免 `ModuleNotFoundError: No module named 'app.api'` 这类问题。
+脚本还会读取 `backend/requirements.txt`，为每个依赖自动添加 `--collect-all`，降低漏包概率（例如 `cryptography`）。
 
 ```powershell
 .\build_tools\build_exe.ps1

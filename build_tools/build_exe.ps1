@@ -29,8 +29,50 @@ function Get-AppModuleNames {
   return $modules | Sort-Object -Unique
 }
 
+function Get-RequirementImports {
+  param(
+    [string]$RequirementsPath
+  )
+
+  if (-not (Test-Path $RequirementsPath)) {
+    throw "Requirements file not found: $RequirementsPath"
+  }
+
+  $distributionToModule = @{
+    "pydantic-settings" = "pydantic_settings"
+    "python-dotenv"     = "dotenv"
+  }
+
+  $imports = New-Object System.Collections.Generic.List[string]
+  Get-Content $RequirementsPath | ForEach-Object {
+    $line = ($_ -replace "^\uFEFF", "").Trim()
+    if (-not $line) { return }
+    if ($line.StartsWith("#")) { return }
+    $line = ($line -split "#", 2)[0].Trim()
+    if (-not $line) { return }
+    $line = ($line -split ";", 2)[0].Trim()
+    if (-not $line) { return }
+
+    $match = [regex]::Match($line, '^([A-Za-z0-9._-]+)(\[[^\]]+\])?')
+    if (-not $match.Success) { return }
+    $distributionName = $match.Groups[1].Value.ToLowerInvariant()
+    if ($distributionToModule.ContainsKey($distributionName)) {
+      $imports.Add($distributionToModule[$distributionName])
+      return
+    }
+
+    $moduleName = $distributionName.Replace("-", "_").Replace(".", "_")
+    if ($moduleName) {
+      $imports.Add($moduleName)
+    }
+  }
+
+  return $imports | Sort-Object -Unique
+}
+
 Write-Host "Installing build dependencies..."
 conda run -n local_world_sim python -m pip install --upgrade pip
+conda run -n local_world_sim python -m pip install -r backend/requirements.txt
 conda run -n local_world_sim python -m pip install pyinstaller pyarmor
 
 if (Test-Path "build") { Remove-Item -Recurse -Force "build" }
@@ -63,21 +105,25 @@ if ($hiddenImports.Count -eq 0) {
   throw "No app modules discovered for hidden imports under: $moduleRoot"
 }
 
+$collectAllImports = @()
+Get-RequirementImports -RequirementsPath "backend/requirements.txt" | ForEach-Object {
+  $collectAllImports += @("--collect-all", $_)
+}
+
+if ($collectAllImports.Count -eq 0) {
+  throw "No dependency modules discovered from backend/requirements.txt"
+}
+
+$collectModuleNames = @($collectAllImports | Where-Object { $_ -ne "--collect-all" } | Sort-Object -Unique)
+Write-Host "Collect-all modules:" ($collectModuleNames -join ", ")
+
 $pyinstallerArgs = @(
   "--noconfirm",
   "--clean",
   "--onefile",
   "--name", $name,
   "--add-data", $uiData
-) + $paths + $hiddenImports + @(
-  "--collect-all", "uvicorn",
-  "--collect-all", "fastapi",
-  "--collect-all", "sqlalchemy",
-  "--collect-all", "aiosqlite",
-  "--collect-all", "pydantic",
-  "--collect-all", "pydantic_settings",
-  $script
-)
+) + $paths + $hiddenImports + $collectAllImports + @($script)
 
 if ($NoConsole) {
   $pyinstallerArgs = @("--noconsole") + $pyinstallerArgs
